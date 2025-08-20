@@ -6,14 +6,14 @@ export const api = {
     return apiRequest(endpoint);
   },
   
-  post: async (endpoint: string, data?: any) => {
+  post: async (endpoint: string, data?: unknown) => {
     return apiRequest(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
   },
   
-  put: async (endpoint: string, data?: any) => {
+  put: async (endpoint: string, data?: unknown) => {
     return apiRequest(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -151,14 +151,14 @@ export const coursesAPI = {
     return apiRequest(`/courses/${id}`);
   },
 
-  create: async (courseData: any) => {
+  create: async (courseData: unknown) => {
     return apiRequest('/courses', {
       method: 'POST',
       body: JSON.stringify(courseData),
     });
   },
 
-  update: async (id: string, courseData: any) => {
+  update: async (id: string, courseData: unknown) => {
     return apiRequest(`/courses/${id}`, {
       method: 'PUT',
       body: JSON.stringify(courseData),
@@ -178,14 +178,14 @@ export const categoriesAPI = {
     return apiRequest('/categories');
   },
 
-  create: async (categoryData: any) => {
+  create: async (categoryData: unknown) => {
     return apiRequest('/categories', {
       method: 'POST',
       body: JSON.stringify(categoryData),
     });
   },
 
-  update: async (id: string, categoryData: any) => {
+  update: async (id: string, categoryData: unknown) => {
     return apiRequest(`/categories/${id}`, {
       method: 'PUT',
       body: JSON.stringify(categoryData),

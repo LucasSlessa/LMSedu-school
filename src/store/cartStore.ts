@@ -92,7 +92,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'cart-storage',
-      partialize: (state) => ({ items: [] }), // Não persistir itens do carrinho
+      partialize: () => ({ items: [] }), // Não persistir itens do carrinho
     }
   )
 );

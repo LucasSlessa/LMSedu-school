@@ -31,13 +31,21 @@ interface Enrollment {
   course: Course;
 }
 
+interface CourseQueryParams {
+  category?: string;
+  level?: string;
+  search?: string;
+  sort?: string;
+  order?: string;
+}
+
 interface CourseState {
   courses: Course[];
   enrollments: Enrollment[];
   loading: boolean;
-  
+
   // Course methods
-  fetchCourses: (params?: any) => Promise<void>;
+  fetchCourses: (params?: CourseQueryParams) => Promise<void>;
   getCourseById: (id: string) => Course | undefined;
   addCourse: (courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>) => Promise<void>;
   updateCourse: (id: string, courseData: Partial<Course>) => Promise<void>;
@@ -55,7 +63,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   enrollments: [],
   loading: false,
   
-  fetchCourses: async (params?: any) => {
+  fetchCourses: async (params?: CourseQueryParams) => {
     set({ loading: true });
     try {
       const courses = await coursesAPI.getAll(params);
