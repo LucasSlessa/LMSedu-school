@@ -15,7 +15,7 @@ export interface PaymentData {
   customerName: string;
   successUrl: string;
   cancelUrl: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PaymentResponse {
@@ -30,7 +30,7 @@ export interface PaymentStatus {
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
   amount: number;
   paidAt?: Date;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // Stripe Payment Provider via API REST
