@@ -17,6 +17,7 @@ import { AdminCourses } from './pages/admin/AdminCourses';
 import { AdminCourseForm } from './pages/admin/AdminCourseForm';
 import { AdminStudents } from './pages/admin/AdminStudents';
 import { AdminReports } from './pages/admin/AdminReports';
+import { AdminCategories } from './pages/admin/AdminCategories';
 import { GraduationCap } from 'lucide-react';
 import { useAuthStore } from './store/authStore';
 import { useCourseStore } from './store/courseStore';
@@ -137,6 +138,10 @@ function App() {
           <Route 
             path="/admin/reports" 
             element={isAuthenticated && user?.role === 'admin' ? <AdminReports /> : <Navigate to="/auth" replace />} 
+          />
+          <Route 
+            path="/admin/categories" 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminCategories /> : <Navigate to="/auth" replace />} 
           />
           
           {/* Catch all route */}

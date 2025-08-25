@@ -9,7 +9,7 @@ export const Register: React.FC = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'student' as 'student' | 'admin',
+    role: 'student' as 'student',
     agreeTerms: false,
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -129,41 +129,21 @@ export const Register: React.FC = () => {
               </div>
             )}
             
-            {/* Tipo de Conta */}
+            {/* Tipo de Conta - Apenas Aluno */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Tipo de conta
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('role', 'student')}
-                  className={`p-3 border rounded-lg text-sm font-medium transition-colors ${
-                    formData.role === 'student'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <span>👨‍🎓</span>
-                    <span>Aluno</span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleInputChange('role', 'admin')}
-                  className={`p-3 border rounded-lg text-sm font-medium transition-colors ${
-                    formData.role === 'admin'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                  }`}
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <span>👨‍💼</span>
-                    <span>Admin</span>
-                  </div>
-                </button>
+              <div className="p-3 border border-blue-500 bg-blue-50 rounded-lg text-sm font-medium text-blue-700">
+                <div className="flex items-center justify-center space-x-2">
+                  <span>👨‍🎓</span>
+                  <span>Aluno</span>
+                </div>
               </div>
+              <p className="mt-2 text-xs text-gray-600 text-center">
+                Apenas contas de alunos podem ser criadas através do registro. 
+                Contas de administrador são criadas diretamente no sistema.
+              </p>
             </div>
             
             <div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, Navigate } from 'react-router-dom';
-import { Star, Clock, Users, Award, Play, FileText, HelpCircle, ShoppingCart, CheckCircle, CreditCard } from 'lucide-react';
+import { Star, Clock, Users, Award, Play, FileText, HelpCircle, ShoppingCart, CheckCircle, CreditCard, Eye } from 'lucide-react';
 import { useCourseStore } from '../store/courseStore';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
@@ -25,6 +25,7 @@ export const CourseDetail: React.FC = () => {
   const isInCart = items.some(item => item.course.id === course.id);
   const purchasedCourses = user ? getPurchasedCourses(user.id) : [];
   const isPurchased = purchasedCourses.some(c => c.id === course.id);
+  const isAdmin = user?.role === 'admin';
   const canAddToCart = isAuthenticated && user?.role === 'student' && !isInCart && !isPurchased;
   
   const handleAddToCart = () => {
@@ -65,6 +66,13 @@ export const CourseDetail: React.FC = () => {
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
       alert('Erro ao processar pagamento. Tente novamente.');
+    }
+  };
+
+  const handleViewCourse = () => {
+    // Para admins, redirecionar para visualização do curso
+    if (isAdmin) {
+      window.location.href = `/learn/${course.id}`;
     }
   };
   
@@ -252,6 +260,23 @@ export const CourseDetail: React.FC = () => {
                 >
                   Acessar Curso
                 </button>
+              </div>
+            ) : isAdmin ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-center space-x-2 text-blue-600 bg-blue-50 py-3 px-4 rounded-lg">
+                  <Eye className="h-5 w-5" />
+                  <span className="font-medium">Modo Administrador</span>
+                </div>
+                <button
+                  onClick={handleViewCourse}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2"
+                >
+                  <Eye className="h-4 w-4" />
+                  <span>Visualizar Curso</span>
+                </button>
+                <div className="text-center text-sm text-gray-600">
+                  <p>Como administrador, você pode visualizar todos os cursos sem comprá-los.</p>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">

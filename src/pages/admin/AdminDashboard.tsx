@@ -8,7 +8,8 @@ import {
   TrendingUp, 
   Calendar,
   Plus,
-  Eye
+  Eye,
+  Tag
 } from 'lucide-react';
 import { useCourseStore } from '../../store/courseStore';
 
@@ -171,6 +172,14 @@ export const AdminDashboard: React.FC = () => {
               >
                 <TrendingUp className="h-5 w-5" />
                 <span className="font-medium">Ver Relatórios</span>
+              </Link>
+              
+              <Link
+                to="/admin/categories"
+                className="flex items-center space-x-3 p-3 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
+              >
+                <Tag className="h-5 w-5" />
+                <span className="font-medium">Gerenciar Categorias</span>
               </Link>
             </div>
           </div>
