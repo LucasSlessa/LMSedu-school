@@ -18,8 +18,8 @@ export const AdminCourses: React.FC = () => {
   ];
   
   const filteredCourses = courses.filter(course => {
-    const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.instructor.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (course.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                         (course.instructor?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'Todas' || course.category === selectedCategory;
     
     return matchesSearch && matchesCategory;

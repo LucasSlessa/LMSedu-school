@@ -26,7 +26,7 @@ export const MyCourses: React.FC = () => {
   }
   
   const purchasedCourses = getPurchasedCourses(user.id);
-  const userProgress = progress.filter(p => p.userId === user.id);
+  const userProgress = (progress || []).filter(p => p.userId === user.id);
   
   const getCourseProgress = (courseId: string) => {
     return userProgress.find(p => p.courseId === courseId);

@@ -149,12 +149,30 @@ router.post('/', authenticateToken, requireRole(['admin', 'instructor']), async 
       targetAudience
     } = req.body;
 
-    // Gerar slug
-    const slug = title.toLowerCase()
+    // Gerar slug base
+    let baseSlug = title.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .trim();
+    
+    // Verificar se o slug já existe e gerar um único
+    let slug = baseSlug;
+    let counter = 1;
+    
+    while (true) {
+      const existingSlug = await executeQuery(
+        'SELECT id FROM courses WHERE slug = $1',
+        [slug]
+      );
+      
+      if (existingSlug.rows.length === 0) {
+        break; // Slug é único
+      }
+      
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
 
     const result = await executeQuery(`
       INSERT INTO courses (

@@ -26,12 +26,30 @@ router.post('/', authenticateToken, requireRole(['admin']), async (req, res) => 
   try {
     const { name, description, color, sortOrder } = req.body;
 
-    // Gerar slug
-    const slug = name.toLowerCase()
+    // Gerar slug base
+    let baseSlug = name.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .trim();
+    
+    // Verificar se o slug já existe e gerar um único
+    let slug = baseSlug;
+    let counter = 1;
+    
+    while (true) {
+      const existingSlug = await executeQuery(
+        'SELECT id FROM categories WHERE slug = $1',
+        [slug]
+      );
+      
+      if (existingSlug.rows.length === 0) {
+        break; // Slug é único
+      }
+      
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
 
     const result = await executeQuery(`
       INSERT INTO categories (name, description, color, slug, sort_order)
@@ -65,7 +83,7 @@ router.put('/:id', authenticateToken, requireRole(['admin']), async (req, res) =
         is_active = $5, updated_at = NOW()
       WHERE id = $6
       RETURNING *
-    `, [name, description, color, sortOrder, isActive, id]);
+    `, [name, description, color, sortOrder || 0, isActive !== undefined ? isActive : true, id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Categoria não encontrada' });

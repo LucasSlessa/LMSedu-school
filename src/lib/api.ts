@@ -283,3 +283,25 @@ export const stripeAPI = {
     return apiRequest(`/stripe/payment-status/${sessionId}`);
   },
 };
+
+// Reports API
+export const reportsAPI = {
+  getOverview: async (days: number = 30) => {
+    return apiRequest(`/reports/overview?days=${days}`);
+  },
+  
+  getRevenue: async (startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    return apiRequest(`/reports/revenue?${params.toString()}`);
+  },
+  
+  getStudents: async () => {
+    return apiRequest('/reports/students');
+  },
+  
+  getCourses: async () => {
+    return apiRequest('/reports/courses');
+  },
+};
