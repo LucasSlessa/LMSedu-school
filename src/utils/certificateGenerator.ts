@@ -20,12 +20,6 @@ export const generateCertificatePDF = async (data: CertificateData): Promise<voi
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 20;
 
-  // Cores
-  const primaryColor = '#1E40AF'; // Blue-700
-  const secondaryColor = '#3B82F6'; // Blue-500
-  const textColor = '#1F2937'; // Gray-800
-  const lightGray = '#F3F4F6'; // Gray-100
-
   // Fundo decorativo
   pdf.setFillColor(248, 250, 252); // Blue-50
   pdf.rect(0, 0, pageWidth, pageHeight, 'F');
