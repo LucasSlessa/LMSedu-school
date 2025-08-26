@@ -28,21 +28,35 @@ export const Login: React.FC = () => {
       } else {
         setError('Email ou senha inválidos');
       }
-    } catch (err) {
-      setError('Erro ao fazer login. Tente novamente.');
+    } catch (err: any) {
+      // Melhorar mensagens de erro para dar mais direção ao usuário
+      if (err.message) {
+        if (err.message.includes('Credenciais inválidas')) {
+          setError('Email ou senha incorretos');
+        } else if (err.message.includes('usuário não encontrado')) {
+          setError('Usuário não encontrado. Verifique o email ou registre-se.');
+        } else if (err.message.includes('senha incorreta')) {
+          setError('Senha incorreta. Verifique sua senha.');
+        } else if (err.message.includes('conta desativada')) {
+          setError('Conta desativada. Entre em contato com o suporte.');
+        } else if (err.message.includes('muitas tentativas')) {
+          setError('Muitas tentativas de login. Aguarde alguns minutos.');
+        } else if (err.message.includes('rede') || err.message.includes('conexão')) {
+          setError('Erro de conexão. Verifique sua internet e tente novamente.');
+        } else if (err.message.includes('servidor')) {
+          setError('Erro no servidor. Tente novamente em alguns minutos.');
+        } else {
+          setError(`Erro: ${err.message}`);
+        }
+      } else {
+        setError('Erro inesperado. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
   };
   
-  const fillDemoCredentials = (role: 'admin' | 'student') => {
-    if (role === 'admin') {
-      setEmail('admin@lms.com');
-    } else {
-      setEmail('aluno@lms.com');
-    }
-    setPassword('123456');
-  };
+
   
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -68,34 +82,7 @@ export const Login: React.FC = () => {
       
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {/* Contas de Demonstração */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 className="text-sm font-medium text-blue-900 mb-3">🚀 Contas de Demonstração:</h3>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => fillDemoCredentials('admin')}
-                className="w-full text-left text-sm text-blue-700 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-100 transition-colors flex items-center"
-              >
-                👨‍💼 <span className="font-mono">admin@lms.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillDemoCredentials('student')}
-                className="w-full text-left text-sm text-blue-700 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-100 transition-colors flex items-center"
-              >
-                👨‍🎓 <span className="font-mono">aluno@lms.com</span>
-              </button>
-              <div className="mt-3 pt-2 border-t border-blue-200">
-                <p className="text-xs text-blue-600 mb-2">
-                  <strong>Senha para ambas:</strong> <span className="font-mono">123456</span>
-                </p>
-                <p className="text-xs text-green-700 bg-green-50 p-2 rounded border border-green-200">
-                  <strong>✨ Automático:</strong> As contas de demonstração são criadas automaticamente no primeiro login!
-                </p>
-              </div>
-            </div>
-          </div>
+
           
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
@@ -104,23 +91,53 @@ export const Login: React.FC = () => {
                   <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
                   <p className="text-red-800 text-sm">{error}</p>
                 </div>
-                {error.includes('inválidos') && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                    <p className="text-yellow-800 text-sm">
-                      <strong>Dica:</strong> Verifique se você digitou o email e senha corretos. 
-                      Para contas de demonstração, use <code className="bg-yellow-100 px-1 rounded">123456</code> como senha.
-                    </p>
-                    <p className="text-yellow-800 text-sm mt-2">
-                      Ainda não tem conta?{' '}
-                      <Link 
-                        to="/register" 
-                        className="text-blue-600 hover:text-blue-800 underline font-medium"
-                      >
-                        Registre-se aqui
-                      </Link>
-                    </p>
-                  </div>
-                )}
+                                 {error.includes('incorretos') && (
+                   <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                     <p className="text-yellow-800 text-sm">
+                       <strong>🔍 Verifique:</strong>
+                     </p>
+                     <ul className="text-yellow-800 text-sm mt-2 space-y-1 list-disc list-inside">
+                       <li>Se o email está escrito corretamente</li>
+                       <li>Se a senha está correta (incluindo maiúsculas/minúsculas)</li>
+                       <li>Se o CAPS LOCK está ativado</li>
+                     </ul>
+                   </div>
+                 )}
+                 
+                 {error.includes('não encontrado') && (
+                   <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                     <p className="text-blue-800 text-sm">
+                       <strong>📝 Ações possíveis:</strong>
+                     </p>
+                     <ul className="text-blue-800 text-sm mt-2 space-y-1 list-disc list-inside">
+                       <li>Verifique se o email está correto</li>
+                       <li>Crie uma nova conta</li>
+                     </ul>
+                     <div className="mt-3 pt-2 border-t border-blue-200">
+                       <Link 
+                         to="/register" 
+                         className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                       >
+                         📝 Criar nova conta
+                       </Link>
+                     </div>
+                   </div>
+                 )}
+                 
+                 {/* Dica geral para qualquer erro */}
+                 <div className="bg-gray-50 border border-gray-200 rounded p-3">
+                   <p className="text-gray-700 text-sm">
+                     <strong>💡 Precisa de ajuda?</strong>
+                   </p>
+                   <div className="mt-2 space-y-2">
+                     <p className="text-gray-600 text-sm">
+                       • Verifique se digitou o email e senha corretos
+                     </p>
+                     <p className="text-gray-600 text-sm">
+                       • Se não tem conta, <Link to="/register" className="text-blue-600 hover:text-blue-800 underline">registre-se aqui</Link>
+                     </p>
+                   </div>
+                 </div>
               </div>
             )}
             
@@ -186,11 +203,11 @@ export const Login: React.FC = () => {
                 </label>
               </div>
               
-              <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                  Esqueceu sua senha?
-                </a>
-              </div>
+                              <div className="text-sm">
+                  <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+                    Esqueceu sua senha?
+                  </Link>
+                </div>
             </div>
             
             <div>

@@ -4,10 +4,10 @@ const { authenticateToken, requireRole } = require('../middleware/auth.cjs');
 
 const router = express.Router();
 
-// Listar cursos públicos
+// Listar cursos (públicos ou admin)
 router.get('/', async (req, res) => {
   try {
-    const { category, level, search, sort = 'created_at', order = 'DESC' } = req.query;
+    const { category, level, search, sort = 'created_at', order = 'DESC', admin } = req.query;
     
     let query = `
       SELECT 
@@ -18,8 +18,14 @@ router.get('/', async (req, res) => {
       FROM courses c
       LEFT JOIN categories cat ON c.category_id = cat.id
       LEFT JOIN users u ON c.instructor_id = u.id
-      WHERE c.status = 'published'
     `;
+    
+    // Se não for admin, filtrar apenas cursos publicados
+    if (!admin) {
+      query += ` WHERE c.status = 'published'`;
+    } else {
+      query += ` WHERE 1=1`;
+    }
     
     const params = [];
     let paramCount = 0;
@@ -184,7 +190,7 @@ router.post('/', authenticateToken, requireRole(['admin', 'instructor']), async 
     `, [
       title, slug, description, shortDescription, price, durationHours,
       req.user.id, categoryId, imageUrl, level, requirements,
-      whatYouLearn, targetAudience, 'draft'
+      whatYouLearn, targetAudience, 'published'
     ]);
 
     res.status(201).json({
@@ -210,15 +216,14 @@ router.put('/:id', authenticateToken, requireRole(['admin', 'instructor']), asyn
       description,
       shortDescription,
       price,
-      durationHours,
-      categoryId,
-      imageUrl,
+      duration,
+      instructor,
+      category,
       level,
-      status,
-      requirements,
-      whatYouLearn,
-      targetAudience
+      image
     } = req.body;
+
+    console.log('Dados recebidos para atualização:', req.body);
 
     // Verificar se o usuário pode editar este curso
     const courseCheck = await executeQuery(
@@ -234,19 +239,58 @@ router.put('/:id', authenticateToken, requireRole(['admin', 'instructor']), asyn
       return res.status(403).json({ error: 'Sem permissão para editar este curso' });
     }
 
+    // Buscar o ID da categoria pelo nome
+    let categoryId = null;
+    if (category) {
+      const categoryResult = await executeQuery(
+        'SELECT id FROM categories WHERE name = $1',
+        [category]
+      );
+      if (categoryResult.rows.length > 0) {
+        categoryId = categoryResult.rows[0].id;
+      }
+    }
+
+    // Buscar o ID do instrutor pelo nome
+    let instructorId = req.user.id; // Por padrão, usar o usuário atual
+    if (instructor) {
+      const instructorResult = await executeQuery(
+        'SELECT id FROM users WHERE name = $1 AND role IN ($2, $3)',
+        [instructor, 'admin', 'instructor']
+      );
+      if (instructorResult.rows.length > 0) {
+        instructorId = instructorResult.rows[0].id;
+      }
+    }
+
     const result = await executeQuery(`
       UPDATE courses SET
-        title = $1, description = $2, short_description = $3, price = $4,
-        duration_hours = $5, category_id = $6, image_url = $7, level = $8,
-        status = $9, requirements = $10, what_you_learn = $11,
-        target_audience = $12, updated_at = NOW()
-      WHERE id = $13
+        title = $1, 
+        description = $2, 
+        short_description = $3, 
+        price = $4,
+        duration_hours = $5, 
+        instructor_id = $6, 
+        category_id = $7, 
+        image_url = $8, 
+        level = $9,
+        updated_at = NOW()
+      WHERE id = $10
       RETURNING *
     `, [
-      title, description, shortDescription, price, durationHours,
-      categoryId, imageUrl, level, status, requirements,
-      whatYouLearn, targetAudience, id
+      title, 
+      description, 
+      shortDescription, 
+      price, 
+      duration,
+      instructorId, 
+      categoryId, 
+      image, 
+      level, 
+      id
     ]);
+
+    console.log('Curso atualizado:', result.rows[0]);
 
     res.json({
       message: 'Curso atualizado com sucesso',
@@ -265,7 +309,7 @@ router.delete('/:id', authenticateToken, requireRole(['admin', 'instructor']), a
 
     // Verificar se o usuário pode deletar este curso
     const courseCheck = await executeQuery(
-      'SELECT instructor_id FROM courses WHERE id = $1',
+      'SELECT instructor_id, title FROM courses WHERE id = $1',
       [id]
     );
 
@@ -277,7 +321,22 @@ router.delete('/:id', authenticateToken, requireRole(['admin', 'instructor']), a
       return res.status(403).json({ error: 'Sem permissão para deletar este curso' });
     }
 
+    // Verificar se há matrículas ativas para este curso
+    const enrollmentsCheck = await executeQuery(
+      'SELECT COUNT(*) as count FROM enrollments WHERE course_id = $1',
+      [id]
+    );
+
+    if (enrollmentsCheck.rows[0].count > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível deletar este curso pois existem alunos matriculados. Considere desativar o curso em vez de deletá-lo.' 
+      });
+    }
+
+    // Deletar o curso
     await executeQuery('DELETE FROM courses WHERE id = $1', [id]);
+
+    console.log(`Curso "${courseCheck.rows[0].title}" deletado com sucesso`);
 
     res.json({ message: 'Curso deletado com sucesso' });
   } catch (error) {

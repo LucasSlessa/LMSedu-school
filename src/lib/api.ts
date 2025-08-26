@@ -29,7 +29,9 @@ export const api = {
 
 // Função para obter token do localStorage
 const getToken = () => {
-  return localStorage.getItem('auth_token');
+  const token = localStorage.getItem('auth_token');
+  console.log('🔍 Token obtido do localStorage:', token ? token.substring(0, 20) + '...' : 'Nenhum token');
+  return token;
 };
 
 // Função para fazer requisições autenticadas
@@ -44,6 +46,11 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
       ...options.headers,
     },
   };
+
+  console.log('🔐 Headers da requisição:', {
+    'Content-Type': config.headers?.['Content-Type'],
+    'Authorization': token ? `Bearer ${token.substring(0, 20)}...` : 'Não definido'
+  });
 
   const url = `${API_BASE_URL}${endpoint}`;
   console.log('📡 Fazendo requisição:', { url, method: options.method || 'GET', body: options.body });
@@ -66,80 +73,73 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
 // Auth API
 export const authAPI = {
   login: async (email: string, password: string) => {
-    const response = await apiRequest('/auth/login', {
+    return apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    
-    if (response.token) {
-      localStorage.setItem('auth_token', response.token);
-    }
-    
-    return response;
   },
-
+  register: async (userData: { email: string; password: string; name: string; role?: string }) => {
+    console.log('📝 Dados do registro:', userData);
+    const body = JSON.stringify(userData);
+    console.log('📝 Body do registro:', body);
+    return apiRequest('/auth/register', {
+      method: 'POST',
+      body: body,
+    });
+  },
   loginWithGoogle: async (email: string, name: string, picture?: string) => {
-    const response = await apiRequest('/auth/google', {
+    return apiRequest('/auth/google', {
       method: 'POST',
       body: JSON.stringify({ email, name, picture }),
     });
-    
-    if (response.token) {
-      localStorage.setItem('auth_token', response.token);
-    }
-    
-    return response;
   },
-
   loginWithGitHub: async (email: string, name: string, picture?: string) => {
-    const response = await apiRequest('/auth/github', {
+    return apiRequest('/auth/github', {
       method: 'POST',
       body: JSON.stringify({ email, name, picture }),
     });
-    
-    if (response.token) {
-      localStorage.setItem('auth_token', response.token);
-    }
-    
-    return response;
   },
-
-  register: async (email: string, password: string, name: string, role: string = 'student') => {
-    const response = await apiRequest('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, name, role }),
-    });
-    
-    if (response.token) {
-      localStorage.setItem('auth_token', response.token);
-    }
-    
-    return response;
+  me: async () => {
+    return apiRequest('/auth/me');
   },
-
   getCurrentUser: async () => {
     return apiRequest('/auth/me');
   },
-
-  updateProfile: async (data: { name: string; avatar_url?: string }) => {
+  logout: async () => {
+    // Remove token from localStorage
+    localStorage.removeItem('auth_token');
+    return Promise.resolve();
+  },
+  forgotPassword: async (email: string) => {
+    return apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+  resetPassword: async (token: string, newPassword: string) => {
+    return apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    });
+  },
+  verifyResetToken: async (token: string) => {
+    return apiRequest(`/auth/verify-reset-token/${token}`);
+  },
+  updateProfile: async (data: { name?: string; avatar_url?: string }) => {
     return apiRequest('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
-
-  logout: () => {
-    localStorage.removeItem('auth_token');
-  },
 };
 
 // Courses API
 export const coursesAPI = {
-  getAll: async (params?: { category?: string; level?: string; search?: string; sort?: string; order?: string }) => {
+  getAll: async (params?: { category?: string; level?: string; search?: string; sort?: string; order?: string; admin?: boolean }) => {
     const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value) searchParams.append(key, value);
+        if (value) searchParams.append(key, value.toString());
       });
     }
     
@@ -342,10 +342,23 @@ export const usersAPI = {
     return apiRequest(`/users/${id}`);
   },
 
+  create: async (userData: { name: string; email: string; role: string; password: string }) => {
+    return apiRequest('/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  },
+
   update: async (id: string, userData: Partial<{ name: string; email: string; role: string; status: string }>) => {
     return apiRequest(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(userData),
+    });
+  },
+
+  delete: async (id: string) => {
+    return apiRequest(`/users/${id}`, {
+      method: 'DELETE',
     });
   },
 

@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Users, DollarSign, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, DollarSign, Eye, Loader2 } from 'lucide-react';
 import { useCourseStore } from '../../store/courseStore';
 
 export const AdminCourses: React.FC = () => {
-  const { courses } = useCourseStore();
+  const { courses, fetchCourses, deleteCourse } = useCourseStore();
+  
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [deletingCourseId, setDeletingCourseId] = useState<string | null>(null);
   
   const categories = [
     'Todas',
@@ -57,6 +62,25 @@ export const AdminCourses: React.FC = () => {
         return level;
     }
   };
+
+  const handleDeleteCourse = async (courseId: string, courseTitle: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o curso "${courseTitle}"? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      setDeletingCourseId(courseId);
+      await deleteCourse(courseId);
+      // Recarregar a lista de cursos
+      await fetchCourses();
+    } catch (error: any) {
+      console.error('Erro ao excluir curso:', error);
+      const errorMessage = error.message || 'Erro ao excluir curso. Tente novamente.';
+      alert(errorMessage);
+    } finally {
+      setDeletingCourseId(null);
+    }
+  };
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -99,8 +123,8 @@ export const AdminCourses: React.FC = () => {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            {categories.map((category) => (
-              <option key={category} value={category}>
+            {categories.map((category, index) => (
+              <option key={`${category}-${index}`} value={category}>
                 {category}
               </option>
             ))}
@@ -199,10 +223,20 @@ export const AdminCourses: React.FC = () => {
                         <Edit className="h-4 w-4" />
                       </Link>
                       <button
-                        className="text-red-600 hover:text-red-700 p-1 rounded"
+                        onClick={() => handleDeleteCourse(course.id, course.title)}
+                        disabled={deletingCourseId === course.id}
+                        className={`p-1 rounded transition-colors ${
+                          deletingCourseId === course.id
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-red-600 hover:text-red-700'
+                        }`}
                         title="Excluir"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deletingCourseId === course.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </td>

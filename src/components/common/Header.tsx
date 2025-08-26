@@ -12,7 +12,7 @@ export const Header: React.FC = () => {
   
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/login');
   };
   
   const cartItemCount = getItemCount();

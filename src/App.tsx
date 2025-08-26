@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/common/Layout';
-import { Auth } from './pages/Auth';
+
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Home } from './pages/Home';
@@ -18,11 +18,14 @@ import { AdminCourseForm } from './pages/admin/AdminCourseForm';
 import { AdminStudents } from './pages/admin/AdminStudents';
 import { AdminReports } from './pages/admin/AdminReports';
 import { AdminCategories } from './pages/admin/AdminCategories';
+import { AdminUsers } from './pages/admin/AdminUsers';
 import { GraduationCap } from 'lucide-react';
 import { useAuthStore } from './store/authStore';
 import { useCourseStore } from './store/courseStore';
 import { useCategoryStore } from './store/categoryStore';
 import { useCartStore } from './store/cartStore';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 
 function App() {
   const { user, isAuthenticated, getCurrentUser } = useAuthStore();
@@ -79,9 +82,10 @@ function App() {
       <Layout>
         <Routes>
           {/* Public routes */}
-          <Route path="/auth" element={isAuthenticated ? <Navigate to="/" replace /> : <Auth />} />
           <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
           <Route path="/register" element={isAuthenticated ? <Navigate to="/" replace /> : <Register />} />
+          <Route path="/forgot-password" element={isAuthenticated ? <Navigate to="/" replace /> : <ForgotPassword />} />
+                     <Route path="/reset-password" element={isAuthenticated ? <Navigate to="/" replace /> : <ResetPassword />} />
           
           {/* Home route */}
           <Route path="/" element={<Home />} />
@@ -93,55 +97,59 @@ function App() {
           {/* Protected student routes */}
           <Route 
             path="/cart" 
-            element={isAuthenticated && user?.role === 'student' ? <Cart /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'student' ? <Cart /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/my-courses" 
-            element={isAuthenticated && user?.role === 'student' ? <MyCourses /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'student' ? <MyCourses /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/learn/:id" 
-            element={isAuthenticated && user?.role === 'student' ? <CourseViewer /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'student' ? <CourseViewer /> : <Navigate to="/login" replace />} 
           />
           
           {/* Payment routes */}
           <Route 
             path="/payment/success" 
-            element={isAuthenticated ? <PaymentSuccess /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated ? <PaymentSuccess /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/payment/cancel" 
-            element={isAuthenticated ? <PaymentCancel /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated ? <PaymentCancel /> : <Navigate to="/login" replace />} 
           />
           
           {/* Admin routes */}
           <Route 
             path="/admin" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/courses" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminCourses /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminCourses /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/courses/new" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminCourseForm /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminCourseForm /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/courses/:id/edit" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminCourseForm /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminCourseForm /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/students" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminStudents /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminStudents /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/reports" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminReports /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminReports /> : <Navigate to="/login" replace />} 
           />
           <Route 
             path="/admin/categories" 
-            element={isAuthenticated && user?.role === 'admin' ? <AdminCategories /> : <Navigate to="/auth" replace />} 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminCategories /> : <Navigate to="/login" replace />} 
+          />
+          <Route 
+            path="/admin/users" 
+            element={isAuthenticated && user?.role === 'admin' ? <AdminUsers /> : <Navigate to="/login" replace />} 
           />
           
           {/* Catch all route */}

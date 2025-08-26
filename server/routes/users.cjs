@@ -74,6 +74,57 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Criar novo usuário (apenas para admins)
+router.post('/', async (req, res) => {
+  try {
+    const { name, email, role, password } = req.body;
+
+    // Validar dados obrigatórios
+    if (!name || !email || !role || !password) {
+      return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+    }
+
+    // Verificar se o email já existe
+    const existingUser = await executeQuery(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já está em uso' });
+    }
+
+    // Hash da senha
+    const bcrypt = require('bcrypt');
+    const saltRounds = 12;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Inserir novo usuário
+    const result = await executeQuery(`
+      INSERT INTO users (name, email, password_hash, role, status)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, name, email, role, status, created_at
+    `, [name, email.toLowerCase(), passwordHash, role, 'active']);
+
+    const newUser = result.rows[0];
+
+    res.status(201).json({
+      message: 'Usuário criado com sucesso',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        status: newUser.status,
+        created_at: newUser.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Obter usuário por ID
 router.get('/:id', async (req, res) => {
   try {
@@ -110,6 +161,96 @@ router.get('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Atualizar usuário
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, status } = req.body;
+
+    // Verificar se o usuário existe
+    const existingUser = await executeQuery(
+      'SELECT id FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (existingUser.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Verificar se o email já está em uso por outro usuário
+    if (email) {
+      const emailCheck = await executeQuery(
+        'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2',
+        [email, id]
+      );
+
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Email já está em uso por outro usuário' });
+      }
+    }
+
+    // Atualizar usuário
+    const result = await executeQuery(`
+      UPDATE users 
+      SET name = COALESCE($1, name),
+          email = COALESCE($2, email),
+          role = COALESCE($3, role),
+          status = COALESCE($4, status),
+          updated_at = NOW()
+      WHERE id = $5
+      RETURNING id, name, email, role, status, created_at, updated_at
+    `, [name, email?.toLowerCase(), role, status, id]);
+
+    const updatedUser = result.rows[0];
+
+    res.json({
+      message: 'Usuário atualizado com sucesso',
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        created_at: updatedUser.created_at,
+        updated_at: updatedUser.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Deletar usuário
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar se o usuário existe
+    const existingUser = await executeQuery(
+      'SELECT id FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (existingUser.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Não permitir deletar o próprio usuário
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'Não é possível deletar sua própria conta' });
+    }
+
+    // Deletar usuário
+    await executeQuery('DELETE FROM users WHERE id = $1', [id]);
+
+    res.json({ message: 'Usuário deletado com sucesso' });
+  } catch (error) {
+    console.error('Erro ao deletar usuário:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });

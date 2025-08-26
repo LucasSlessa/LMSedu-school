@@ -15,13 +15,22 @@ const generateToken = (userId) => {
 
 // Registro
 router.post('/register', async (req, res) => {
-  const { email, password, name, role = 'student' } = req.body;
+  console.log('📝 Registro recebido:', {
+    body: req.body,
+    headers: req.headers['content-type'],
+    bodyType: typeof req.body
+  });
+  
+  const emailInput = (req.body.email || '').toString().trim().toLowerCase();
+  const passwordInput = (req.body.password || '').toString();
+  const name = (req.body.name || '').toString();
+  const role = (req.body.role || 'student').toString();
 
   try {
     // Verificar se usuário já existe
     const existingUser = await executeQuery(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [emailInput]
     );
 
     if (existingUser.rows.length > 0) {
@@ -30,14 +39,14 @@ router.post('/register', async (req, res) => {
 
     // Hash da senha
     const saltRounds = 12;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
+    const passwordHash = await bcrypt.hash(passwordInput, saltRounds);
 
     // Criar usuário
     const result = await executeQuery(
       `INSERT INTO users (email, password_hash, name, role, email_verified) 
        VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, email, name, role, created_at`,
-      [email, passwordHash, name, role, true]
+      [emailInput, passwordHash, name, role, true]
     );
 
     const user = result.rows[0];
@@ -62,60 +71,16 @@ router.post('/register', async (req, res) => {
 
 // Login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const emailInput = (req.body.email || '').toString().trim().toLowerCase();
+  const passwordInput = (req.body.password || '').toString();
   
-  console.log('🔐 Tentativa de login:', { email });
-
-  // Modo de desenvolvimento com dados mock
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🛠️ Usando modo de desenvolvimento com dados mock');
-    
-    // Verificar credenciais mock
-    if (email === 'admin@lms.com' && password === '123456') {
-      const mockUser = {
-        id: '00000000-0000-0000-0000-000000000001',
-        email: 'admin@lms.com',
-        name: 'Administrador',
-        role: 'admin'
-      };
-      
-      const token = generateToken(mockUser.id);
-      console.log('✅ Login mock bem-sucedido:', { userId: mockUser.id, role: mockUser.role });
-      
-      return res.json({
-        message: 'Login realizado com sucesso',
-        user: mockUser,
-        token
-      });
-    }
-    
-    if (email === 'aluno@lms.com' && password === '123456') {
-      const mockUser = {
-        id: '00000000-0000-0000-0000-000000000002',
-        email: 'aluno@lms.com',
-        name: 'Aluno Demonstração',
-        role: 'student'
-      };
-      
-      const token = generateToken(mockUser.id);
-      console.log('✅ Login mock bem-sucedido:', { userId: mockUser.id, role: mockUser.role });
-      
-      return res.json({
-        message: 'Login realizado com sucesso',
-        user: mockUser,
-        token
-      });
-    }
-    
-    console.log('❌ Credenciais mock inválidas');
-    return res.status(401).json({ error: 'Credenciais inválidas' });
-  }
+  console.log('🔐 Tentativa de login:', { email: emailInput });
 
   try {
     // Buscar usuário
     const result = await executeQuery(
-      'SELECT id, email, password_hash, name, role, status FROM users WHERE email = $1',
-      [email]
+      'SELECT id, email, password_hash, name, role, status FROM users WHERE LOWER(email) = LOWER($1)',
+      [emailInput]
     );
 
     console.log('📊 Resultado da busca:', { 
@@ -124,8 +89,8 @@ router.post('/login', async (req, res) => {
     });
 
     if (result.rows.length === 0) {
-      console.log('❌ Usuário não encontrado:', email);
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+      console.log('❌ Usuário não encontrado:', emailInput);
+      return res.status(401).json({ error: 'Usuário não encontrado' });
     }
 
     const user = result.rows[0];
@@ -143,12 +108,12 @@ router.post('/login', async (req, res) => {
     }
 
     // Verificar senha
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    const isValidPassword = await bcrypt.compare(passwordInput, user.password_hash);
     console.log('🔑 Verificação de senha:', { isValid: isValidPassword });
     
     if (!isValidPassword) {
       console.log('❌ Senha inválida');
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+      return res.status(401).json({ error: 'Senha incorreta' });
     }
 
     // Atualizar último login
@@ -178,15 +143,17 @@ router.post('/login', async (req, res) => {
 
 // Login com Google
 router.post('/google', async (req, res) => {
-  const { email, name, picture } = req.body;
+  const emailInput = (req.body.email || '').toString().trim().toLowerCase();
+  const name = (req.body.name || '').toString();
+  const picture = req.body.picture;
   
-  console.log('🔐 Tentativa de login com Google:', { email, name });
+  console.log('🔐 Tentativa de login com Google:', { email: emailInput, name });
 
   try {
     // Verificar se o usuário já existe
     const result = await executeQuery(
-      'SELECT id, email, name, role, status FROM users WHERE email = $1',
-      [email]
+      'SELECT id, email, name, role, status FROM users WHERE LOWER(email) = LOWER($1)',
+      [emailInput]
     );
 
     let user;
@@ -197,7 +164,7 @@ router.post('/google', async (req, res) => {
         INSERT INTO users (email, name, role, status, avatar_url, auth_provider)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, email, name, role, status
-      `, [email, name, 'student', 'active', picture, 'google']);
+      `, [emailInput, name, 'student', 'active', picture, 'google']);
       
       user = newUser.rows[0];
       console.log('✅ Novo usuário Google criado:', user);
@@ -248,15 +215,17 @@ router.post('/google', async (req, res) => {
 
 // Login com GitHub
 router.post('/github', async (req, res) => {
-  const { email, name, picture } = req.body;
+  const emailInput = (req.body.email || '').toString().trim().toLowerCase();
+  const name = (req.body.name || '').toString();
+  const picture = req.body.picture;
   
-  console.log('🔐 Tentativa de login com GitHub:', { email, name });
+  console.log('🔐 Tentativa de login com GitHub:', { email: emailInput, name });
 
   try {
     // Verificar se o usuário já existe
     const result = await executeQuery(
-      'SELECT id, email, name, role, status FROM users WHERE email = $1',
-      [email]
+      'SELECT id, email, name, role, status FROM users WHERE LOWER(email) = LOWER($1)',
+      [emailInput]
     );
 
     let user;
@@ -267,7 +236,7 @@ router.post('/github', async (req, res) => {
         INSERT INTO users (email, name, role, status, avatar_url, auth_provider)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, email, name, role, status
-      `, [email, name, 'student', 'active', picture, 'github']);
+      `, [emailInput, name, 'student', 'active', picture, 'github']);
       
       user = newUser.rows[0];
       console.log('✅ Novo usuário GitHub criado:', user);
@@ -351,6 +320,190 @@ router.put('/profile', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao atualizar perfil:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Esqueceu a senha
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  
+  console.log('🔐 Solicitação de reset de senha:', { email });
+
+  try {
+    // Verificar se o usuário existe
+    const result = await executeQuery(
+      'SELECT id, email, name FROM users WHERE email = $1 AND status = $2',
+      [email, 'active']
+    );
+
+    if (result.rows.length === 0) {
+      console.log('❌ Usuário não encontrado ou inativo:', email);
+      // Por segurança, não revelamos se o email existe ou não
+      return res.json({ 
+        message: 'Se o email estiver cadastrado, você receberá um link para resetar sua senha' 
+      });
+    }
+
+    const user = result.rows[0];
+    
+    // Gerar token único para reset
+    const resetToken = require('crypto').randomBytes(32).toString('hex');
+    const resetTokenHash = await bcrypt.hash(resetToken, 10);
+    
+    // Salvar token no banco com expiração (24 horas)
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
+    
+    await executeQuery(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) 
+       VALUES ($1, $2, $3) 
+       ON CONFLICT (user_id) 
+       DO UPDATE SET token_hash = $2, expires_at = $3, created_at = NOW()`,
+      [user.id, resetTokenHash, expiresAt]
+    );
+
+    // Em produção, aqui seria enviado um email real
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+    
+    console.log('✅ Token de reset gerado:', { 
+      userId: user.id, 
+      resetUrl: resetUrl,
+      expiresAt: expiresAt 
+    });
+
+    // TODO: Implementar envio de email real em produção
+    // Por enquanto, retornar o token para desenvolvimento
+    res.json({
+      message: 'Token de reset gerado com sucesso',
+      resetUrl: resetUrl,
+      token: resetToken,
+      expiresAt: expiresAt
+    });
+
+  } catch (error) {
+    console.error('❌ Erro ao gerar token de reset:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Reset de senha
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  
+  console.log('🔐 Tentativa de reset de senha com token');
+
+  try {
+    // Buscar token válido
+    const result = await executeQuery(
+      `SELECT prt.user_id, prt.expires_at, u.email, u.name 
+       FROM password_reset_tokens prt 
+       JOIN users u ON prt.user_id = u.id 
+       WHERE prt.expires_at > NOW()`,
+      []
+    );
+
+    if (result.rows.length === 0) {
+      console.log('❌ Nenhum token válido encontrado');
+      return res.status(400).json({ error: 'Token inválido ou expirado' });
+    }
+
+    // Verificar se algum token corresponde
+    let validToken = null;
+    for (const row of result.rows) {
+      const isValid = await bcrypt.compare(token, row.token_hash);
+      if (isValid) {
+        validToken = row;
+        break;
+      }
+    }
+
+    if (!validToken) {
+      console.log('❌ Token inválido');
+      return res.status(400).json({ error: 'Token inválido ou expirado' });
+    }
+
+    console.log('✅ Token válido encontrado:', { 
+      userId: validToken.user_id, 
+      email: validToken.email 
+    });
+
+    // Hash da nova senha
+    const saltRounds = 12;
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Atualizar senha do usuário
+    await executeQuery(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newPasswordHash, validToken.user_id]
+    );
+
+    // Remover token usado
+    await executeQuery(
+      'DELETE FROM password_reset_tokens WHERE user_id = $1',
+      [validToken.user_id]
+    );
+
+    console.log('✅ Senha atualizada com sucesso:', { userId: validToken.user_id });
+
+    res.json({
+      message: 'Senha atualizada com sucesso',
+      user: {
+        email: validToken.email,
+        name: validToken.name
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erro ao resetar senha:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Verificar token de reset (para validação no frontend)
+router.get('/verify-reset-token/:token', async (req, res) => {
+  const { token } = req.params;
+  
+  console.log('🔐 Verificando token de reset');
+
+  try {
+    // Buscar token válido
+    const result = await executeQuery(
+      `SELECT prt.user_id, prt.expires_at, u.email, u.name 
+       FROM password_reset_tokens prt 
+       JOIN users u ON prt.user_id = u.id 
+       WHERE prt.expires_at > NOW()`,
+      []
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ valid: false, message: 'Token expirado' });
+    }
+
+    // Verificar se algum token corresponde
+    let validToken = null;
+    for (const row of result.rows) {
+      const isValid = await bcrypt.compare(token, row.token_hash);
+      if (isValid) {
+        validToken = row;
+        break;
+      }
+    }
+
+    if (!validToken) {
+      return res.json({ valid: false, message: 'Token inválido' });
+    }
+
+    res.json({
+      valid: true,
+      message: 'Token válido',
+      user: {
+        email: validToken.email,
+        name: validToken.name
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erro ao verificar token:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });

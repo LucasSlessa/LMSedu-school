@@ -66,7 +66,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   fetchCourses: async (params?: CourseQueryParams) => {
     set({ loading: true });
     try {
-      const courses = await coursesAPI.getAll(params);
+      const courses = await coursesAPI.getAll({ ...params, admin: true });
       set({ courses, loading: false });
     } catch (error) {
       console.error('Erro ao buscar cursos:', error);

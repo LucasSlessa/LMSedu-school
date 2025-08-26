@@ -1,330 +1,203 @@
-# 🎓 EduPlatform - Sistema Completo de Ensino Online
+# 🚀 LMS Platform - Sistema de Gestão de Cursos Online
 
-Uma plataforma moderna e completa para ensino online com PostgreSQL (Neon), Stripe para pagamentos e sistema completo de carrinho de compras.
+Uma plataforma completa de Learning Management System (LMS) desenvolvida com React, Node.js e PostgreSQL, pronta para produção.
 
 ## ✨ Funcionalidades Principais
 
-### 👨‍🎓 Para Alunos
-- **Catálogo de Cursos** com filtros avançados
-- **Sistema de Pagamento** integrado com Stripe
-- **Player de Vídeo** com controle de progresso
-- **Questionários** com sistema de aprovação (70% mínimo)
-- **Certificados PDF** automáticos (100% conclusão)
-- **Carrinho de Compras** com múltiplos itens
-- **Dashboard Pessoal** com progresso detalhado
+### 👤 Usuários
+- **Registro e Login** com autenticação JWT
+- **Reset de senha** via email
+- **Perfis de usuário** (estudante e administrador)
+- **Sistema de roles** com controle de acesso
 
-### 👨‍💼 Para Administradores
-- **Gestão Completa de Cursos** (CRUD)
-- **Sistema de Categorias** personalizável
-- **Upload de Arquivos** (vídeos, PDFs, imagens)
-- **Construtor de Questionários** avançado
-- **Relatórios e Analytics** detalhados
-- **Gestão de Alunos** e matrículas
-- **Dashboard Administrativo** completo
+### 📚 Cursos
+- **Catálogo de cursos** com categorias
+- **Sistema de matrículas** automático
+- **Progresso de cursos** com percentual
+- **Conteúdo multimídia** (vídeos, textos, exercícios)
 
-### 💳 Sistema de Pagamentos
-- **Stripe** como gateway principal
-- **Confirmação por Email** automática
-- **Links de Acesso** seguros
-- **Webhooks** para confirmação
-- **Ambiente de Teste** integrado
+### 💳 Pagamentos
+- **Integração com Stripe** para pagamentos
+- **Webhooks** para processamento automático
+- **Sistema de pedidos** completo
+- **Matrículas automáticas** após pagamento
+
+### 👨‍💼 Painel Administrativo
+- **Dashboard** com métricas em tempo real
+- **Gerenciamento de usuários** e cursos
+- **Relatórios** e analytics
+- **Sistema de certificados**
 
 ## 🛠️ Tecnologias Utilizadas
 
 ### Frontend
-- **React 18** + TypeScript
+- **React 18** com TypeScript
 - **Tailwind CSS** para estilização
 - **Zustand** para gerenciamento de estado
 - **React Router** para navegação
 - **Lucide React** para ícones
-- **jsPDF** para geração de certificados
 
 ### Backend
-- **PostgreSQL (Neon)** como banco de dados
-- **Node.js + Express** como servidor backend
+- **Node.js** com Express
+- **PostgreSQL** com node-postgres
 - **JWT** para autenticação
-- **bcryptjs** para hash de senhas
-- **Stripe** para processamento de pagamentos
-
-### Integrações
+- **bcrypt** para hash de senhas
 - **Stripe** para pagamentos
-- **Neon PostgreSQL** para banco de dados
-- **Webhooks** para confirmação de pagamentos
+
+### Infraestrutura
+- **Docker** para containerização
+- **Neon** para banco PostgreSQL
+- **Vercel/Netlify** para deploy do frontend
+- **Railway/Render** para deploy do backend
 
 ## 🚀 Instalação e Configuração
 
-### 1. Clone o Repositório
+### Pré-requisitos
+- Node.js 18+
+- PostgreSQL 14+
+- Conta no Stripe
+
+### 1. Clone o repositório
 ```bash
-git clone https://github.com/seu-usuario/eduplatform.git
-cd eduplatform
+git clone https://github.com/seu-usuario/lms-platform.git
+cd lms-platform
 ```
 
-### 2. Instale as Dependências
+### 2. Instale as dependências
 ```bash
+# Backend
 npm install
+
+# Frontend
+cd src && npm install
 ```
 
-### 3. Configure o Banco de Dados (Neon)
-
-#### 3.1. Acesse o Neon
-O banco já está configurado no Neon com a connection string fornecida.
-
-#### 3.2. Configure as variáveis de ambiente
+### 3. Configure as variáveis de ambiente
 ```bash
 # Copie o arquivo de exemplo
 cp .env.example .env
 
-# Edite o arquivo .env com suas configurações
+# Edite com suas configurações
 nano .env
 ```
 
-Configure as seguintes variáveis principais no arquivo `.env`:
-```env
-DATABASE_URL=postgresql://neondb_owner:npg_9GDSU6KLqhZP@ep-delicate-shadow-acyiyp9l-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-JWT_SECRET=sua_chave_jwt_super_secreta_aqui
-VITE_API_URL=http://localhost:3001/api
-STRIPE_SECRET_KEY=sk_test_sua_chave_stripe
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_sua_chave_stripe
+### 4. Configure o banco de dados
+```bash
+# Execute o script de setup
+psql -d seu_banco -f setup-database.sql
 ```
 
-#### 3.3. Aplique o schema do banco
+### 5. Inicie o servidor
 ```bash
-# Execute o script SQL no Neon (use o psql ou interface web do Neon)
-psql 'postgresql://neondb_owner:npg_9GDSU6KLqhZP@ep-delicate-shadow-acyiyp9l-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' -f server/database/schema.sql
-```
-
-### 4. Inicie o Servidor Backend
-```bash
-# Em um terminal, inicie o servidor backend
-npm run server:dev
-```
-
-### 5. Inicie o Frontend
-```bash
-# Em outro terminal, inicie o frontend
+# Desenvolvimento
 npm run dev
+
+# Produção
+npm start
 ```
 
-### 6. Acesse a Aplicação
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:3001/api
+## 🔧 Configuração para Produção
 
-### 7. Contas de Demonstração
-As contas de demonstração já estão no banco:
+### Variáveis de Ambiente
+```bash
+NODE_ENV=production
+DATABASE_URL=sua_url_postgresql
+JWT_SECRET=seu_jwt_secret_super_seguro
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+FRONTEND_URL=https://seudominio.com
+BACKEND_URL=https://api.seudominio.com
+```
 
-- **Admin**: admin@lms.com / 123456
-- **Aluno**: aluno@lms.com / 123456
+### Deploy
+```bash
+# Build do frontend
+npm run build
+
+# Deploy do backend
+npm start
+```
 
 ## 📊 Estrutura do Banco de Dados
 
-### Principais Tabelas
-- **users** - Usuários do sistema
-- **categories** - Categorias de cursos
-- **courses** - Cursos disponíveis
-- **course_modules** - Módulos dos cursos
-- **course_lessons** - Aulas individuais
-- **cart_items** - Itens do carrinho de compras
-- **orders** - Pedidos de compra
-- **order_items** - Itens dos pedidos
-- **enrollments** - Matrículas dos alunos
-- **certificates** - Certificados emitidos
-- **stripe_customers** - Clientes no Stripe
-- **quiz_questions** - Perguntas dos questionários
-- **quiz_attempts** - Tentativas de questionários
-- **lesson_progress** - Progresso das aulas
+### Tabelas Principais
+- `users` - Usuários do sistema
+- `courses` - Cursos disponíveis
+- `enrollments` - Matrículas dos usuários
+- `orders` - Pedidos de pagamento
+- `categories` - Categorias de cursos
+- `password_reset_tokens` - Tokens para reset de senha
 
 ### Relacionamentos
-- Usuários podem ter itens no carrinho
-- Carrinho gera pedidos de compra
-- Pedidos geram matrículas
-- Usuários podem ter múltiplas matrículas
-- Cursos possuem múltiplos módulos
-- Módulos contêm múltiplas aulas
-- Matrículas podem gerar certificados
+- Usuários podem se matricular em múltiplos cursos
+- Cursos pertencem a categorias
+- Pedidos geram matrículas automaticamente
+- Tokens de reset expiram em 24 horas
 
-### Segurança
-- **Autenticação JWT** para proteção de rotas
-- **Hash bcrypt** para senhas
-- **Middleware de autorização** baseado em roles
-- **Validação de dados** no backend
-- **Stripe Webhooks** para confirmação segura
+## 🔐 Segurança
 
-## 🔧 Configuração de Pagamentos
+- **Senhas hasheadas** com bcrypt
+- **JWT tokens** com expiração configurável
+- **CORS** configurado adequadamente
+- **Rate limiting** para prevenir abusos
+- **Validação** de dados em todas as rotas
 
-### Stripe
-1. Crie uma conta no [Stripe](https://stripe.com)
-2. Obtenha suas chaves de API
-3. Configure no arquivo `.env`:
-```env
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_... (para produção)
-```
+## 📈 Monitoramento e Logs
 
-## 🎯 Fluxo de Compra
+- **Logs estruturados** para todas as operações
+- **Métricas** em tempo real no dashboard
+- **Tratamento de erros** robusto
+- **Auditoria** de ações administrativas
 
-1. **Aluno** navega pelo catálogo
-2. **Adiciona** cursos ao carrinho
-3. **Finaliza** a compra no carrinho
-4. **Sistema** cria sessão de checkout no Stripe
-5. **Redireciona** para página de pagamento do Stripe
-6. **Stripe** processa o pagamento
-7. **Webhook** confirma e matricula o aluno automaticamente
-8. **Aluno** recebe acesso imediato aos cursos
+## 🚨 Troubleshooting
 
-## 📋 Funcionalidades Detalhadas
+### Problemas Comuns
 
-### Sistema de Questionários
-- **Múltiplos tipos**: Múltipla escolha, V/F, resposta curta
-- **Pontuação mínima**: 70% para aprovação
-- **Tentativas ilimitadas** até aprovação
-- **Feedback imediato** com explicações
-- **Bloqueio de progresso** até aprovação
+1. **Erro de conexão com banco**
+   - Verifique `DATABASE_URL` no `.env`
+   - Confirme se o PostgreSQL está rodando
 
-### Certificados Automáticos
-- **Geração em PDF** com design profissional
-- **Dados personalizados** (nome, curso, data)
-- **Código de verificação** único
-- **Download disponível** apenas com 100% conclusão
-- **Armazenamento seguro** no sistema
+2. **Erro de autenticação**
+   - Verifique `JWT_SECRET` no `.env`
+   - Confirme se o usuário existe no banco
 
-### Dashboard Administrativo
-- **Métricas em tempo real**
-- **Gráficos de performance**
-- **Gestão de usuários**
-- **Relatórios financeiros**
-- **Logs de atividade**
+3. **Erro de pagamento**
+   - Verifique as chaves do Stripe
+   - Confirme se os webhooks estão configurados
 
-## 🔒 Segurança
-
-### Autenticação
-- **JWT tokens** para autenticação
-- **bcrypt** para hash de senhas
-- **Middleware de autorização** baseado em roles
-- **Validação de dados** em todas as camadas
-
-### Pagamentos
-- **Dados criptografados** em trânsito
-- **Webhooks assinados** para verificação
-- **Logs de transação** detalhados
-- **Conformidade PCI** através dos gateways
-
-### Dados
-- **Validação rigorosa** de entrada
-- **Sanitização** de dados
-- **Validação de entrada** no frontend e backend
-- **CORS configurado** adequadamente
-
-## 📱 Responsividade
-
-- **Design Mobile-First**
-- **Breakpoints otimizados**
-- **Touch-friendly** em dispositivos móveis
-- **Performance otimizada** para todas as telas
-
-## 🧪 Ambiente de Teste
-
-### Dados de Teste
-Contas já disponíveis no banco:
-- **Admin**: admin@lms.com / 123456  
-- **Aluno**: aluno@lms.com / 123456
-
-### Pagamentos com Stripe
-- Use cartões de teste do Stripe
-- **Sucesso**: 4242 4242 4242 4242
-- **Falha**: 4000 0000 0000 0002
-- CVV: qualquer 3 dígitos
-- Data: qualquer data futura
-
-## 🔧 Comandos Úteis
-
-### Desenvolvimento
+### Logs de Debug
 ```bash
-# Iniciar servidor de desenvolvimento
-npm run dev
-
-# Iniciar servidor backend
-npm run server:dev
-
-# Build para produção
-npm run build
-
-# Preview da build
-npm run preview
-
-# Linting
-npm run lint
+# Ative logs detalhados
+LOG_LEVEL=debug
 ```
-
-### Neon PostgreSQL
-```bash
-# Conectar ao banco Neon
-psql 'postgresql://neondb_owner:npg_9GDSU6KLqhZP@ep-delicate-shadow-acyiyp9l-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
-
-# Executar schema
-psql 'postgresql://neondb_owner:npg_9GDSU6KLqhZP@ep-delicate-shadow-acyiyp9l-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' -f server/database/schema.sql
-
-# Backup do banco
-pg_dump 'postgresql://neondb_owner:npg_9GDSU6KLqhZP@ep-delicate-shadow-acyiyp9l-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' > backup.sql
-```
-
-## 📈 Próximas Funcionalidades
-
-- [ ] **Chat em tempo real** entre alunos e instrutores
-- [ ] **Gamificação** com pontos e badges
-- [ ] **Trilhas de aprendizado** personalizadas
-- [ ] **App mobile** nativo
-- [ ] **Marketplace** para instrutores externos
-- [ ] **Assinatura mensal** para acesso ilimitado
-- [ ] **Inteligência artificial** para recomendações
-
-## 🐛 Solução de Problemas
-
-### Erro: "relation does not exist"
-1. Verifique se o Neon está acessível
-2. Execute o schema: Use o comando psql com a connection string do Neon
-3. Confirme que todas as tabelas foram criadas
-
-### Erro de conexão com banco
-1. Verifique se a connection string do Neon está correta
-2. Confirme as credenciais no arquivo `.env`
-3. Teste a conexão com o Neon
-
-### Servidor backend não inicia
-1. Verifique se todas as dependências foram instaladas: `npm install`
-2. Confirme as variáveis de ambiente no `.env`
-3. Verifique se a porta 3001 não está em uso
-
-### Erro no Stripe
-1. Verifique se as chaves do Stripe estão corretas no `.env`
-2. Confirme se está usando chaves de teste (começam com `sk_test_` e `pk_test_`)
-3. Verifique se o webhook está configurado corretamente
 
 ## 🤝 Contribuição
 
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
+1. Fork o projeto
+2. Crie uma branch para sua feature
+3. Commit suas mudanças
+4. Push para a branch
 5. Abra um Pull Request
 
 ## 📄 Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
 
 ## 📞 Suporte
 
-- **Email**: suporte@eduplatform.com
-- **WhatsApp**: (11) 99999-9999
+- **Issues**: [GitHub Issues](https://github.com/seu-usuario/lms-platform/issues)
+- **Documentação**: [Wiki do projeto](https://github.com/seu-usuario/lms-platform/wiki)
+- **Email**: suporte@seudominio.com
 
-## 🙏 Agradecimentos
+## 🎯 Roadmap
 
-- **React Team** pelo framework incrível
-- **Tailwind CSS** pela facilidade de estilização
-- **Neon** pela hospedagem PostgreSQL
-- **Stripe** pelo gateway de pagamento
-- **Comunidade Open Source** pelas bibliotecas utilizadas
+- [ ] Sistema de notificações push
+- [ ] Integração com Zoom/Teams
+- [ ] App mobile nativo
+- [ ] Sistema de gamificação
+- [ ] Analytics avançados
+- [ ] Integração com outros gateways de pagamento
 
 ---
 
-**Desenvolvido com ❤️ para democratizar a educação online**
+**⭐ Se este projeto te ajudou, considere dar uma estrela!**

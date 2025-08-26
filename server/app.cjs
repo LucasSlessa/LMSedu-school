@@ -30,6 +30,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Middleware de log
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  if (req.method === 'POST' || req.method === 'PUT') {
+    console.log('📝 Request headers:', req.headers);
+    console.log('📝 Request body type:', typeof req.body);
+    console.log('📝 Request body:', req.body);
+  }
   next();
 });
 

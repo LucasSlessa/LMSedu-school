@@ -38,6 +38,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authAPI.login(email, password);
       console.log('✅ Login bem-sucedido:', response);
       
+      // Salvar token no localStorage
+      if (response.token) {
+        try {
+          localStorage.setItem('auth_token', response.token);
+          console.log('💾 Token salvo no localStorage:', response.token.substring(0, 20) + '...');
+          console.log('🔍 Token verificado:', localStorage.getItem('auth_token') ? 'Presente' : 'Ausente');
+        } catch (error) {
+          console.error('❌ Erro ao salvar token no localStorage:', error);
+        }
+      } else {
+        console.warn('⚠️ Nenhum token recebido na resposta');
+      }
+      
       set({ 
         user: response.user, 
         isAuthenticated: true,
@@ -66,6 +79,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authAPI.loginWithGoogle(email, name, picture);
       console.log('✅ Login Google bem-sucedido:', response);
       
+      // Salvar token no localStorage
+      if (response.token) {
+        try {
+          localStorage.setItem('auth_token', response.token);
+          console.log('💾 Token salvo no localStorage:', response.token.substring(0, 20) + '...');
+          console.log('🔍 Token verificado:', localStorage.getItem('auth_token') ? 'Presente' : 'Ausente');
+        } catch (error) {
+          console.error('❌ Erro ao salvar token no localStorage:', error);
+        }
+      } else {
+        console.warn('⚠️ Nenhum token recebido na resposta');
+      }
+      
       set({ 
         user: response.user, 
         isAuthenticated: true,
@@ -93,6 +119,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authAPI.loginWithGitHub(email, name, picture);
       console.log('✅ Login GitHub bem-sucedido:', response);
       
+      // Salvar token no localStorage
+      if (response.token) {
+        try {
+          localStorage.setItem('auth_token', response.token);
+          console.log('💾 Token salvo no localStorage:', response.token.substring(0, 20) + '...');
+          console.log('🔍 Token verificado:', localStorage.getItem('auth_token') ? 'Presente' : 'Ausente');
+        } catch (error) {
+          console.error('❌ Erro ao salvar token no localStorage:', error);
+        }
+      } else {
+        console.warn('⚠️ Nenhum token recebido na resposta');
+      }
+      
       set({ 
         user: response.user, 
         isAuthenticated: true,
@@ -115,8 +154,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true });
     
     try {
-      const response = await authAPI.register(email, password, name, role);
+      const response = await authAPI.register({ email, password, name, role });
       console.log('✅ Registro bem-sucedido:', response);
+      
+      // Salvar token no localStorage
+      if (response.token) {
+        try {
+          localStorage.setItem('auth_token', response.token);
+          console.log('💾 Token salvo no localStorage:', response.token.substring(0, 20) + '...');
+          console.log('🔍 Token verificado:', localStorage.getItem('auth_token') ? 'Presente' : 'Ausente');
+        } catch (error) {
+          console.error('❌ Erro ao salvar token no localStorage:', error);
+        }
+      } else {
+        console.warn('⚠️ Nenhum token recebido na resposta');
+      }
       
       set({ 
         user: response.user, 
@@ -138,6 +190,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('🚪 Fazendo logout');
     try {
       authAPI.logout();
+      // Remover token do localStorage
+      localStorage.removeItem('auth_token');
+      console.log('🗑️ Token removido do localStorage');
       set({ user: null, isAuthenticated: false });
       console.log('✅ Logout realizado');
     } catch (error) {

@@ -10,7 +10,8 @@ import {
   Plus,
   Eye,
   Tag,
-  Loader2
+  Loader2,
+  Shield
 } from 'lucide-react';
 import { useCourseStore } from '../../store/courseStore';
 import { reportsAPI } from '../../lib/api';
@@ -312,6 +313,14 @@ export const AdminDashboard: React.FC = () => {
               >
                 <Tag className="h-5 w-5" />
                 <span className="font-medium">Gerenciar Categorias</span>
+              </Link>
+              
+              <Link
+                to="/admin/users"
+                className="flex items-center space-x-3 p-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Shield className="h-5 w-5" />
+                <span className="font-medium">Gerenciar Usuários</span>
               </Link>
             </div>
           </div>

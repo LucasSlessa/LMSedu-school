@@ -23,7 +23,7 @@ export const AdminStudents: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-
+  
   // UI state for modals/actions
   const [modalType, setModalType] = useState<'none' | 'password' | 'grant' | 'certificate'>('none');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -355,8 +355,8 @@ export const AdminStudents: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
-
+        </div>
+        
       {/* ===== Modals Section ===== */}
       {modalType !== 'none' && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -466,9 +466,9 @@ export const AdminStudents: React.FC = () => {
                       {submitting ? 'Liberando...' : 'Liberar Certificados'}
                     </button>
                   </div>
-                </div>
-              )}
-            </div>
+          </div>
+        )}
+      </div>
           </div>
         </div>
       )}

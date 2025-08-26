@@ -9,6 +9,7 @@ const router = express.Router();
 let stripe;
 if (process.env.STRIPE_SECRET_KEY) {
   stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  console.log('✅ Stripe configurado com chave:', process.env.STRIPE_SECRET_KEY.substring(0, 20) + '...');
 } else {
   console.log('⚠️  Stripe não configurado, usando modo mock');
   stripe = null;
@@ -18,6 +19,13 @@ if (process.env.STRIPE_SECRET_KEY) {
 router.post('/create-checkout-session', authenticateToken, async (req, res) => {
   try {
     const { courseId } = req.body;
+
+    console.log('🔍 Criando sessão de checkout para curso:', courseId);
+    console.log('👤 Usuário:', req.user.id, req.user.email);
+
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe não está configurado' });
+    }
 
     // Buscar curso
     const courseResult = await executeQuery(
@@ -30,6 +38,7 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     }
 
     const course = courseResult.rows[0];
+    console.log('📚 Curso encontrado:', course.title, 'Preço:', course.price);
 
     // Verificar se usuário já possui o curso
     const enrollmentCheck = await executeQuery(
@@ -43,31 +52,40 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
     // Buscar ou criar cliente Stripe
     let stripeCustomer;
-    const customerResult = await executeQuery(
-      'SELECT customer_id FROM stripe_customers WHERE user_id = $1',
-      [req.user.id]
-    );
-
-    if (customerResult.rows.length > 0) {
-      stripeCustomer = await stripe.customers.retrieve(customerResult.rows[0].customer_id);
-    } else {
-      // Criar novo cliente no Stripe
-      stripeCustomer = await stripe.customers.create({
-        email: req.user.email,
-        name: req.user.name,
-        metadata: {
-          userId: req.user.id
-        }
-      });
-
-      // Salvar no banco
-      await executeQuery(
-        'INSERT INTO stripe_customers (user_id, customer_id) VALUES ($1, $2)',
-        [req.user.id, stripeCustomer.id]
+    try {
+      const customerResult = await executeQuery(
+        'SELECT customer_id FROM stripe_customers WHERE user_id = $1',
+        [req.user.id]
       );
+
+      if (customerResult.rows.length > 0) {
+        console.log('🔍 Cliente Stripe existente encontrado');
+        stripeCustomer = await stripe.customers.retrieve(customerResult.rows[0].customer_id);
+      } else {
+        console.log('🆕 Criando novo cliente Stripe');
+        // Criar novo cliente no Stripe
+        stripeCustomer = await stripe.customers.create({
+          email: req.user.email,
+          name: req.user.name,
+          metadata: {
+            userId: req.user.id
+          }
+        });
+
+        // Salvar no banco
+        await executeQuery(
+          'INSERT INTO stripe_customers (user_id, customer_id) VALUES ($1, $2)',
+          [req.user.id, stripeCustomer.id]
+        );
+        console.log('✅ Cliente Stripe criado:', stripeCustomer.id);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao gerenciar cliente Stripe:', error);
+      return res.status(500).json({ error: 'Erro ao configurar cliente de pagamento' });
     }
 
     // Criar sessão de checkout
+    console.log('🛒 Criando sessão de checkout...');
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomer.id,
       payment_method_types: ['card'],
@@ -86,13 +104,16 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&course_id=${courseId}`,
-      cancel_url: `${process.env.FRONTEND_URL}/payment/cancel?course_id=${courseId}`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?session_id={CHECKOUT_SESSION_ID}&course_id=${courseId}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel?course_id=${courseId}`,
       metadata: {
         userId: req.user.id,
         courseId: courseId,
       },
     });
+
+    console.log('✅ Sessão de checkout criada:', session.id);
+    console.log('🔗 URL de pagamento:', session.url);
 
     // Criar pedido no banco
     const orderResult = await executeQuery(`
@@ -124,8 +145,20 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro ao criar sessão de checkout:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    console.error('❌ Erro ao criar sessão de checkout:', error);
+    
+    // Log detalhado do erro
+    if (error.type) {
+      console.error('Tipo de erro Stripe:', error.type);
+    }
+    if (error.message) {
+      console.error('Mensagem de erro:', error.message);
+    }
+    
+    res.status(500).json({ 
+      error: 'Erro ao processar pagamento',
+      details: error.message || 'Erro desconhecido'
+    });
   }
 });
 
