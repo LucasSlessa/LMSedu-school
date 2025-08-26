@@ -197,3 +197,46 @@ router.post('/admin/complete', async (req, res) => {
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
+
+// Listar matrículas de um usuário (admin)
+router.get('/admin/user/:userId', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await executeQuery(`
+      SELECT 
+        e.*,
+        c.title,
+        c.description,
+        c.duration_hours,
+        c.image_url,
+        c.level
+      FROM enrollments e
+      JOIN courses c ON e.course_id = c.id
+      WHERE e.user_id = $1
+      ORDER BY e.created_at DESC
+    `, [userId]);
+
+    const enrollments = result.rows.map(row => ({
+      id: row.id,
+      status: row.status,
+      progressPercentage: row.progress_percentage,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      certificateUrl: row.certificate_url,
+      createdAt: row.created_at,
+      course: {
+        id: row.course_id,
+        title: row.title,
+        description: row.description,
+        duration: row.duration_hours,
+        image: row.image_url,
+        level: row.level,
+      }
+    }));
+
+    res.json(enrollments);
+  } catch (error) {
+    console.error('Erro ao listar matrículas do usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});

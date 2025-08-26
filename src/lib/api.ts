@@ -283,6 +283,10 @@ export const enrollmentsAPI = {
       body: JSON.stringify({ userId, courseId }),
     });
   },
+
+  adminListUser: async (userId: string) => {
+    return apiRequest(`/enrollments/admin/user/${userId}`);
+  },
 };
 
 // Stripe API
@@ -349,6 +353,12 @@ export const usersAPI = {
     return apiRequest(`/users/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+  },
+
+  resetPasswordTemp: async (id: string) => {
+    return apiRequest(`/users/${id}/reset-password-temp`, {
+      method: 'POST',
     });
   },
 };

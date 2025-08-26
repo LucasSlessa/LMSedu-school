@@ -1,12 +1,43 @@
 const express = require('express');
 const { pool, executeQuery } = require('../config/database.cjs');
 const { authenticateToken, requireRole } = require('../middleware/auth.cjs');
+const bcrypt = require('bcrypt');
 
 const router = express.Router();
 
 // Middleware para verificar se é admin
 router.use(authenticateToken);
 router.use(requireRole(['admin']));
+
+// Redefinir senha temporária (admin)
+router.post('/:id/reset-password-temp', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Impedir redefinir a própria senha por este endpoint (use fluxo de perfil)
+    if (req.user && String(req.user.id) === String(id)) {
+      return res.status(403).json({ error: 'Use o fluxo de perfil para alterar sua própria senha' });
+    }
+
+    // Gerar senha temporária
+    const tempPassword = Math.random().toString(36).slice(-10);
+    const hash = await bcrypt.hash(tempPassword, 12);
+
+    const result = await executeQuery(
+      `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, name`,
+      [hash, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    return res.json({ message: 'Senha temporária gerada', tempPassword });
+  } catch (error) {
+    console.error('Erro ao gerar senha temporária:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
 
 // Listar todos os usuários (apenas para admins)
 router.get('/', async (req, res) => {
