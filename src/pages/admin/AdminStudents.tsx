@@ -1,28 +1,63 @@
-import React, { useState } from 'react';
-import { Search, Filter, Mail, Calendar, BookOpen, Award, Eye, MoreVertical } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Mail, Calendar, BookOpen, Award, Eye, MoreVertical, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useCourseStore } from '../../store/courseStore';
+import { usersAPI, enrollmentsAPI } from '../../lib/api';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  avatar_url?: string;
+  created_at: string;
+  last_login?: string;
+}
 
 export const AdminStudents: React.FC = () => {
-  const { getAllUsers } = useAuthStore();
-  const { purchases, progress, courses } = useCourseStore();
+  const { user: currentUser } = useAuthStore();
+  const { enrollments, courses } = useCourseStore();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   
-  const students = getAllUsers().filter(user => user.role === 'student');
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const data = await usersAPI.getAll();
+        setUsers(data);
+        setError(null);
+      } catch (err) {
+        console.error('Erro ao buscar usuários:', err);
+        setError('Erro ao carregar usuários');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+  
+  const students = users.filter(user => user.role === 'student' || user.role === 'admin');
   
   const getStudentStats = (studentId: string) => {
-    const studentPurchases = purchases.filter(p => p.userId === studentId && p.status === 'completed');
-    const studentProgress = progress.filter(p => p.userId === studentId);
-    const completedCourses = studentProgress.filter(p => p.completionPercentage === 100);
-    const totalSpent = studentPurchases.reduce((sum, p) => sum + p.amount, 0);
+    // Placeholder até implementarmos fetch de matrículas por usuário
+    const userEnrollments = enrollments; // TODO: filtrar por userId quando disponível no store
+    const coursesEnrolled = userEnrollments.length;
+    const coursesCompleted = userEnrollments.filter(e => e.status === 'completed').length;
+    const totalSpent = userEnrollments.reduce((sum, e) => sum + (e.course.price || 0), 0);
+    const lastActivity = userEnrollments.length > 0 ? new Date(Math.max(...userEnrollments.map(e => new Date(e.createdAt).getTime()))) : null;
     
     return {
-      coursesEnrolled: studentPurchases.length,
-      coursesCompleted: completedCourses.length,
+      coursesEnrolled,
+      coursesCompleted,
       totalSpent,
-      lastActivity: studentPurchases.length > 0 ? 
-        new Date(Math.max(...studentPurchases.map(p => new Date(p.createdAt).getTime()))) : null
+      lastActivity
     };
   };
   
@@ -68,6 +103,63 @@ export const AdminStudents: React.FC = () => {
     if (coursesEnrolled >= 3) return 'Muito Ativo';
     return 'Ativo';
   };
+
+  const toggleRole = async (user: User) => {
+    const newRole = user.role === 'admin' ? 'student' : 'admin';
+    try {
+      await usersAPI.update(user.id, { role: newRole });
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u));
+    } catch (err) {
+      alert('Erro ao alterar papel do usuário');
+    }
+  };
+
+  const grantCourse = async (user: User) => {
+    if (!selectedCourseId) {
+      alert('Selecione um curso');
+      return;
+    }
+    try {
+      await enrollmentsAPI.adminGrant(user.id, selectedCourseId);
+      alert('Curso liberado para o aluno');
+    } catch (err) {
+      alert('Erro ao liberar curso');
+    }
+  };
+
+  const completeCourse = async (user: User) => {
+    if (!selectedCourseId) {
+      alert('Selecione um curso');
+      return;
+    }
+    try {
+      await enrollmentsAPI.adminComplete(user.id, selectedCourseId);
+      alert('Curso concluído e certificado liberado');
+    } catch (err) {
+      alert('Erro ao concluir curso');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Carregando usuários...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800">{error}</p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -79,6 +171,21 @@ export const AdminStudents: React.FC = () => {
         </p>
       </div>
       
+      {/* Seletor de curso para ações */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 mb-6 flex items-center space-x-3">
+        <label className="text-sm text-gray-700">Curso para ações:</label>
+        <select
+          value={selectedCourseId}
+          onChange={(e) => setSelectedCourseId(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">Selecione um curso</option>
+          {courses.map((c) => (
+            <option key={c.id} value={c.id}>{c.title}</option>
+          ))}
+        </select>
+      </div>
+      
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -87,7 +194,7 @@ export const AdminStudents: React.FC = () => {
               <BookOpen className="h-6 w-6 text-blue-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total de Alunos</p>
+              <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
               <p className="text-2xl font-bold text-gray-900">{students.length}</p>
             </div>
           </div>
@@ -99,10 +206,8 @@ export const AdminStudents: React.FC = () => {
               <Award className="h-6 w-6 text-green-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Alunos Ativos</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {students.filter(s => getStudentStats(s.id).coursesEnrolled > 0).length}
-              </p>
+              <p className="text-sm font-medium text-gray-600">Admins</p>
+              <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.role === 'admin').length}</p>
             </div>
           </div>
         </div>
@@ -115,8 +220,8 @@ export const AdminStudents: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Novos este Mês</p>
               <p className="text-2xl font-bold text-gray-900">
-                {students.filter(s => {
-                  const createdDate = new Date(s.createdAt);
+                {users.filter(s => {
+                  const createdDate = new Date(s.created_at);
                   const now = new Date();
                   return createdDate.getMonth() === now.getMonth() && 
                          createdDate.getFullYear() === now.getFullYear();
@@ -132,10 +237,8 @@ export const AdminStudents: React.FC = () => {
               <Mail className="h-6 w-6 text-orange-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Receita Total</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatPrice(purchases.reduce((sum, p) => sum + p.amount, 0))}
-              </p>
+              <p className="text-sm font-medium text-gray-600">Total de Matrículas</p>
+              <p className="text-2xl font-bold text-gray-900">{enrollments.length}</p>
             </div>
           </div>
         </div>
@@ -153,7 +256,7 @@ export const AdminStudents: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <input
               type="text"
-              placeholder="Buscar alunos..."
+              placeholder="Buscar usuários..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -166,32 +269,26 @@ export const AdminStudents: React.FC = () => {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">Todos os Status</option>
-            <option value="active">Alunos Ativos</option>
-            <option value="inactive">Alunos Inativos</option>
+            <option value="active">Com matrículas</option>
+            <option value="inactive">Sem matrículas</option>
           </select>
         </div>
       </div>
       
-      {/* Lista de Alunos */}
+      {/* Lista de Usuários */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Aluno
+                  Usuário
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  Papel
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cursos
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gasto Total
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Última Atividade
+                  Criado em
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
@@ -199,63 +296,63 @@ export const AdminStudents: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStudents.map((student) => {
-                const stats = getStudentStats(student.id);
+              {filteredStudents.map((user) => {
                 return (
-                  <tr key={student.id} className="hover:bg-gray-50">
+                  <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-blue-600 font-medium">
-                            {student.name.charAt(0).toUpperCase()}
+                            {user.name.charAt(0).toUpperCase()}
                           </span>
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {student.name}
+                            {user.name}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {student.email}
+                            {user.email}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(stats.coursesEnrolled)}`}>
-                        {getStatusText(stats.coursesEnrolled)}
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        {user.role}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {stats.coursesEnrolled} matriculado{stats.coursesEnrolled !== 1 ? 's' : ''}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {stats.coursesCompleted} concluído{stats.coursesCompleted !== 1 ? 's' : ''}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatPrice(stats.totalSpent)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {formatDate(stats.lastActivity)}
+                        {new Date(user.created_at).toLocaleDateString('pt-BR')}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <button
-                          className="text-blue-600 hover:text-blue-700 p-1 rounded"
-                          title="Ver Detalhes"
+                          onClick={() => toggleRole(user)}
+                          className="text-purple-600 hover:text-purple-700 p-1 rounded text-sm border border-purple-200 px-3 py-1 disabled:opacity-50"
+                          title="Alternar papel (admin/aluno)"
+                          disabled={currentUser?.id === user.id}
                         >
-                          <Eye className="h-4 w-4" />
+                          Alternar Papel
                         </button>
+
                         <button
-                          className="text-gray-600 hover:text-gray-700 p-1 rounded"
-                          title="Mais Opções"
+                          onClick={() => grantCourse(user)}
+                          className="text-blue-600 hover:text-blue-700 p-1 rounded text-sm border border-blue-200 px-3 py-1"
+                          title="Liberar curso para o aluno"
+                          disabled={!selectedCourseId}
                         >
-                          <MoreVertical className="h-4 w-4" />
+                          Liberar Curso
+                        </button>
+
+                        <button
+                          onClick={() => completeCourse(user)}
+                          className="text-green-600 hover:text-green-700 p-1 rounded text-sm border border-green-200 px-3 py-1"
+                          title="Marcar curso como concluído e liberar certificado"
+                          disabled={!selectedCourseId}
+                        >
+                          Liberar Certificado
                         </button>
                       </div>
                     </td>

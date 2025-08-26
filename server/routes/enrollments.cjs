@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool, executeQuery } = require('../config/database.cjs');
-const { authenticateToken } = require('../middleware/auth.cjs');
+const { authenticateToken, requireRole } = require('../middleware/auth.cjs');
 
 const router = express.Router();
 
@@ -133,3 +133,67 @@ router.put('/:courseId/progress', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+ 
+// ====== Ações administrativas ======
+// Nota: rotas admin devem ser registradas antes do module.exports, mas como exportamos o router, podemos anexá-las acima do export ou mover o export ao final do arquivo. Vamos garantir que fiquem anexadas corretamente abaixo também.
+ 
+// Middleware admin para rotas abaixo
+router.use('/admin', authenticateToken, requireRole(['admin']));
+
+// Conceder matrícula a um aluno
+router.post('/admin/grant', async (req, res) => {
+  try {
+    const { userId, courseId } = req.body;
+    if (!userId || !courseId) {
+      return res.status(400).json({ error: 'userId e courseId são obrigatórios' });
+    }
+
+    // Verifica se já existe
+    const existing = await executeQuery(
+      'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2',
+      [userId, courseId]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({ message: 'Matrícula já existe', enrollmentId: existing.rows[0].id });
+    }
+
+    // Cria matrícula
+    const insert = await executeQuery(
+      `INSERT INTO enrollments (user_id, course_id, status, progress_percentage, started_at, created_at, updated_at)
+       VALUES ($1, $2, 'active', 0, NOW(), NOW(), NOW()) RETURNING *`,
+      [userId, courseId]
+    );
+
+    return res.json({ message: 'Matrícula concedida com sucesso', enrollment: insert.rows[0] });
+  } catch (error) {
+    console.error('Erro ao conceder matrícula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Marcar matrícula como concluída (liberar certificado)
+router.post('/admin/complete', async (req, res) => {
+  try {
+    const { userId, courseId } = req.body;
+    if (!userId || !courseId) {
+      return res.status(400).json({ error: 'userId e courseId são obrigatórios' });
+    }
+
+    const result = await executeQuery(
+      `UPDATE enrollments
+       SET status = 'completed', progress_percentage = 100, completed_at = NOW(), updated_at = NOW()
+       WHERE user_id = $1 AND course_id = $2
+       RETURNING *`,
+      [userId, courseId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Matrícula não encontrada' });
+    }
+
+    return res.json({ message: 'Matrícula marcada como concluída', enrollment: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao concluir matrícula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});

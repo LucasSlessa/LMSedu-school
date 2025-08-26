@@ -268,6 +268,21 @@ export const enrollmentsAPI = {
       body: JSON.stringify({ progressPercentage }),
     });
   },
+
+  // Admin endpoints
+  adminGrant: async (userId: string, courseId: string) => {
+    return apiRequest('/enrollments/admin/grant', {
+      method: 'POST',
+      body: JSON.stringify({ userId, courseId }),
+    });
+  },
+
+  adminComplete: async (userId: string, courseId: string) => {
+    return apiRequest('/enrollments/admin/complete', {
+      method: 'POST',
+      body: JSON.stringify({ userId, courseId }),
+    });
+  },
 };
 
 // Stripe API
@@ -310,5 +325,30 @@ export const reportsAPI = {
   
   getCourses: async () => {
     return apiRequest('/reports/courses');
+  },
+};
+
+// Users API
+export const usersAPI = {
+  getAll: async () => {
+    return apiRequest('/users');
+  },
+
+  getById: async (id: string) => {
+    return apiRequest(`/users/${id}`);
+  },
+
+  update: async (id: string, userData: Partial<{ name: string; email: string; role: string; status: string }>) => {
+    return apiRequest(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+  },
+
+  updateStatus: async (id: string, status: string) => {
+    return apiRequest(`/users/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   },
 };

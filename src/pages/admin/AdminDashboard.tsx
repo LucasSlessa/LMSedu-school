@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Users, 
@@ -9,40 +9,173 @@ import {
   Calendar,
   Plus,
   Eye,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react';
 import { useCourseStore } from '../../store/courseStore';
+import { reportsAPI } from '../../lib/api';
+
+interface DashboardData {
+  metrics: {
+    totalRevenue: number;
+    totalStudents: number;
+    totalCourses: number;
+    completedCourses: number;
+    completionRate: number;
+  };
+  monthlyRevenue: Array<{
+    month: string;
+    revenue: number;
+  }>;
+  coursesByCategory: Array<{
+    category: string;
+    count: number;
+  }>;
+  topCourses: Array<{
+    title: string;
+    id: string;
+    sales: number;
+    revenue: number;
+    avgTicket: number;
+  }>;
+  newStudents: Array<{
+    month: string;
+    newStudents: number;
+  }>;
+}
 
 export const AdminDashboard: React.FC = () => {
-  const { courses, purchases } = useCourseStore();
+  const { courses } = useCourseStore();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const data = await reportsAPI.getOverview(30); // Últimos 30 dias
+        setDashboardData(data);
+        setError(null);
+      } catch (err) {
+        console.error('Erro ao carregar dados do dashboard:', err);
+        setError('Erro ao carregar dados do dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const formatNumber = (value: number) => {
+    return new Intl.NumberFormat('pt-BR').format(value);
+  };
+
+  const getCurrentMonthData = () => {
+    if (!dashboardData) return { newCourses: 0, newStudents: 0, revenue: 0 };
+    
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const currentMonthData = dashboardData.monthlyRevenue.find(item => 
+      item.month.startsWith(currentMonth)
+    );
+    
+    const currentMonthStudents = dashboardData.newStudents.find(item => 
+      item.month.startsWith(currentMonth)
+    );
+    
+    return {
+      newCourses: 0, // Não temos dados de novos cursos por mês ainda
+      newStudents: currentMonthStudents?.newStudents || 0,
+      revenue: currentMonthData?.revenue || 0
+    };
+  };
+
+  const getPreviousMonthData = () => {
+    if (!dashboardData) return { newCourses: 0, newStudents: 0, revenue: 0 };
+    
+    const currentDate = new Date();
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    const previousMonth = currentDate.toISOString().slice(0, 7);
+    
+    const previousMonthData = dashboardData.monthlyRevenue.find(item => 
+      item.month.startsWith(previousMonth)
+    );
+    
+    const previousMonthStudents = dashboardData.newStudents.find(item => 
+      item.month.startsWith(previousMonth)
+    );
+    
+    return {
+      newCourses: 0,
+      newStudents: previousMonthStudents?.newStudents || 0,
+      revenue: previousMonthData?.revenue || 0
+    };
+  };
+
+  const calculatePercentageChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 100);
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Carregando dados do dashboard...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentMonth = getCurrentMonthData();
+  const previousMonth = getPreviousMonthData();
   
   const stats = [
     {
       name: 'Total de Cursos',
-      value: courses.length,
-      change: '+12%',
-      changeType: 'increase',
+      value: dashboardData?.metrics.totalCourses || 0,
+      change: `+${dashboardData?.metrics.totalCourses || 0}`,
+      changeType: 'increase' as const,
       icon: BookOpen,
     },
     {
       name: 'Alunos Ativos',
-      value: '2,847',
-      change: '+8%',
-      changeType: 'increase',
+      value: formatNumber(dashboardData?.metrics.totalStudents || 0),
+      change: `+${currentMonth.newStudents}`,
+      changeType: 'increase' as const,
       icon: Users,
     },
     {
       name: 'Receita Total',
-      value: 'R$ 45.290',
-      change: '+23%',
-      changeType: 'increase',
+      value: formatCurrency(dashboardData?.metrics.totalRevenue || 0),
+      change: `+${calculatePercentageChange(currentMonth.revenue, previousMonth.revenue)}%`,
+      changeType: currentMonth.revenue >= previousMonth.revenue ? 'increase' as const : 'decrease' as const,
       icon: DollarSign,
     },
     {
       name: 'Certificados Emitidos',
-      value: '1,239',
-      change: '+15%',
-      changeType: 'increase',
+      value: formatNumber(dashboardData?.metrics.completedCourses || 0),
+      change: `+${dashboardData?.metrics.completionRate || 0}%`,
+      changeType: 'increase' as const,
       icon: Award,
     },
   ];
@@ -50,10 +183,7 @@ export const AdminDashboard: React.FC = () => {
   const recentCourses = courses.slice(0, 5);
   
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
+    return formatCurrency(price);
   };
   
   return (
@@ -82,8 +212,10 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="mt-4 flex items-center">
-                <TrendingUp className="h-4 w-4 text-green-500" />
-                <span className="text-sm text-green-600 ml-1">{item.change}</span>
+                <TrendingUp className={`h-4 w-4 ${item.changeType === 'increase' ? 'text-green-500' : 'text-red-500'}`} />
+                <span className={`text-sm ${item.changeType === 'increase' ? 'text-green-600' : 'text-red-600'} ml-1`}>
+                  {item.change}
+                </span>
                 <span className="text-sm text-gray-500 ml-1">vs. mês anterior</span>
               </div>
             </div>
@@ -228,27 +360,41 @@ export const AdminDashboard: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900">Visão Geral Mensal</h3>
           <div className="flex items-center space-x-2">
             <Calendar className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-600">Dezembro 2024</span>
+            <span className="text-sm text-gray-600">
+              {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
           </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="text-center">
-            <div className="text-3xl font-bold text-blue-600 mb-2">12</div>
-            <div className="text-sm text-gray-600">Novos Cursos</div>
-            <div className="text-xs text-green-600 mt-1">+20% vs. nov</div>
+            <div className="text-3xl font-bold text-blue-600 mb-2">
+              {dashboardData?.metrics.totalCourses || 0}
+            </div>
+            <div className="text-sm text-gray-600">Total de Cursos</div>
+            <div className="text-xs text-green-600 mt-1">
+              {dashboardData?.metrics.totalCourses || 0} cursos ativos
+            </div>
           </div>
           
           <div className="text-center">
-            <div className="text-3xl font-bold text-green-600 mb-2">847</div>
+            <div className="text-3xl font-bold text-green-600 mb-2">
+              {formatNumber(currentMonth.newStudents)}
+            </div>
             <div className="text-sm text-gray-600">Novos Alunos</div>
-            <div className="text-xs text-green-600 mt-1">+15% vs. nov</div>
+            <div className="text-xs text-green-600 mt-1">
+              +{calculatePercentageChange(currentMonth.newStudents, previousMonth.newStudents)}% vs. mês anterior
+            </div>
           </div>
           
           <div className="text-center">
-            <div className="text-3xl font-bold text-purple-600 mb-2">R$ 12.4k</div>
-            <div className="text-sm text-gray-600">Receita</div>
-            <div className="text-xs text-green-600 mt-1">+28% vs. nov</div>
+            <div className="text-3xl font-bold text-purple-600 mb-2">
+              {formatCurrency(currentMonth.revenue)}
+            </div>
+            <div className="text-sm text-gray-600">Receita do Mês</div>
+            <div className="text-xs text-green-600 mt-1">
+              +{calculatePercentageChange(currentMonth.revenue, previousMonth.revenue)}% vs. mês anterior
+            </div>
           </div>
         </div>
       </div>
