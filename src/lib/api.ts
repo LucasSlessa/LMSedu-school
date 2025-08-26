@@ -282,6 +282,13 @@ export const stripeAPI = {
   getPaymentStatus: async (sessionId: string) => {
     return apiRequest(`/stripe/payment-status/${sessionId}`);
   },
+
+  forceEnrollment: async (sessionId: string) => {
+    return apiRequest('/stripe/force-enrollment', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+  },
 };
 
 // Reports API

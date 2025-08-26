@@ -27,6 +27,16 @@ export const PaymentSuccess: React.FC = () => {
       try {
         const paymentStatus = await stripeAPI.getPaymentStatus(sessionId);
         setPaymentData(paymentStatus);
+
+        // Tentar criar matrícula automaticamente se o pagamento foi confirmado
+        if (paymentStatus.paymentStatus === 'paid' || paymentStatus.paymentStatus === 'complete') {
+          try {
+            await stripeAPI.forceEnrollment(sessionId);
+            console.log('✅ Matrícula criada automaticamente');
+          } catch (enrollmentError) {
+            console.log('ℹ️  Matrícula já existe ou erro na criação:', enrollmentError);
+          }
+        }
       } catch (err) {
         console.error('Erro ao buscar status do pagamento:', err);
         setError('Erro ao buscar informações do pagamento.');

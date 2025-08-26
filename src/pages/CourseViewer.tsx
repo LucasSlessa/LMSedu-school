@@ -43,9 +43,9 @@ export const CourseViewer: React.FC = () => {
   }
 
   const course = getCourseById(id);
-  const purchasedCourses = getPurchasedCourses(user.id);
+  const purchasedCourses = getPurchasedCourses();
   const hasPurchased = purchasedCourses.some(c => c.id === id);
-  const userProgress = getUserProgress(user.id, id);
+  const userProgress = getUserProgress(id);
 
   if (!course) {
     return <Navigate to="/courses" replace />;
@@ -55,6 +55,13 @@ export const CourseViewer: React.FC = () => {
     return <Navigate to={`/courses/${id}`} replace />;
   }
 
+  // Função para calcular módulos concluídos baseado no progressPercentage
+  const getCompletedModules = (progressPercentage: number, totalModules: number) => {
+    if (!progressPercentage || typeof progressPercentage !== 'number' || progressPercentage <= 0) return [];
+    const completedCount = Math.floor((progressPercentage / 100) * totalModules);
+    return Array.from({ length: totalModules }, (_, i) => (i + 1).toString()).slice(0, completedCount);
+  };
+
   // Módulos do curso (simulados - em produção viriam do banco)
   const courseModules: CourseModule[] = [
     {
@@ -63,7 +70,7 @@ export const CourseViewer: React.FC = () => {
       type: 'video',
       content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       duration: 15,
-      completed: userProgress?.completedContent.includes('1') || false,
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('1') : false,
       locked: false,
     },
     {
@@ -72,16 +79,16 @@ export const CourseViewer: React.FC = () => {
       type: 'video',
       content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       duration: 25,
-      completed: userProgress?.completedContent.includes('2') || false,
-      locked: !userProgress?.completedContent.includes('1'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('2') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('1') : true,
     },
     {
       id: '3',
       title: 'Material de Apoio - Capítulo 1',
       type: 'pdf',
       content: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-      completed: userProgress?.completedContent.includes('3') || false,
-      locked: !userProgress?.completedContent.includes('2'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('3') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('2') : true,
     },
     {
       id: '4',
@@ -89,16 +96,16 @@ export const CourseViewer: React.FC = () => {
       type: 'video',
       content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       duration: 45,
-      completed: userProgress?.completedContent.includes('4') || false,
-      locked: !userProgress?.completedContent.includes('3'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('4') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('3') : true,
     },
     {
       id: '5',
       title: 'Quiz - Teste seus Conhecimentos',
       type: 'quiz',
       content: '',
-      completed: userProgress?.completedContent.includes('5') || false,
-      locked: !userProgress?.completedContent.includes('4'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('5') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('4') : true,
     },
     {
       id: '6',
@@ -106,8 +113,8 @@ export const CourseViewer: React.FC = () => {
       type: 'video',
       content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       duration: 35,
-      completed: userProgress?.completedContent.includes('6') || false,
-      locked: !userProgress?.completedContent.includes('5'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('6') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('5') : true,
     },
     {
       id: '7',
@@ -115,16 +122,16 @@ export const CourseViewer: React.FC = () => {
       type: 'video',
       content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       duration: 60,
-      completed: userProgress?.completedContent.includes('7') || false,
-      locked: !userProgress?.completedContent.includes('6'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('7') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('6') : true,
     },
     {
       id: '8',
       title: 'Avaliação Final',
       type: 'quiz',
       content: '',
-      completed: userProgress?.completedContent.includes('8') || false,
-      locked: !userProgress?.completedContent.includes('7'),
+      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('8') : false,
+      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('7') : true,
     },
   ];
 
@@ -142,17 +149,26 @@ export const CourseViewer: React.FC = () => {
   }, []);
 
   const handleModuleComplete = (moduleId: string) => {
-    updateProgress(user.id, id, moduleId);
-    
-    // Atualizar estado local
+    // Calcula novo progresso com o módulo atual marcado como concluído
     const moduleIndex = courseModules.findIndex(m => m.id === moduleId);
-    if (moduleIndex !== -1) {
+    if (moduleIndex !== -1 && !courseModules[moduleIndex].completed) {
+      // Marca o módulo como concluído
       courseModules[moduleIndex].completed = true;
+      
+      // Calcula novo progresso
+      const completedCount = courseModules.filter(m => m.completed).length;
+      const newProgress = Math.min(100, Math.round((completedCount / totalModules) * 100));
+      
+      // Atualiza no backend
+      updateProgress(id, newProgress);
       
       // Desbloquear próximo módulo
       if (moduleIndex + 1 < courseModules.length) {
         courseModules[moduleIndex + 1].locked = false;
       }
+      
+      // Força re-render
+      setActiveModule({ ...courseModules[moduleIndex] });
     }
   };
 

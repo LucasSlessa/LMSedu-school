@@ -39,22 +39,16 @@ class StripeProvider implements PaymentProvider {
 
   async createPayment(data: PaymentData): Promise<PaymentResponse> {
     try {
-      const response = await api.post('/stripe/create-session', {
+      // Usa a rota real de criação de sessão de checkout do backend
+      const response = await api.post('/stripe/create-checkout-session', {
         courseId: data.courseId,
-        amount: data.amount,
-        currency: data.currency,
-        customerEmail: data.customerEmail,
-        customerName: data.customerName,
-        successUrl: data.successUrl,
-        cancelUrl: data.cancelUrl,
-        metadata: data.metadata,
       });
 
+      // Backend retorna { sessionId, url, orderId }
       return {
-        paymentId: response.data.paymentId,
-        paymentUrl: response.data.paymentUrl,
+        paymentId: response.data.sessionId,
+        paymentUrl: response.data.url,
         status: 'pending',
-        expiresAt: response.data.expiresAt ? new Date(response.data.expiresAt) : undefined,
       };
     } catch (error) {
       console.error('Erro ao criar pagamento Stripe:', error);
@@ -64,19 +58,52 @@ class StripeProvider implements PaymentProvider {
 
   async verifyPayment(paymentId: string): Promise<PaymentStatus> {
     try {
-      const response = await api.get(`/stripe/verify-session/${paymentId}`);
+      // Consulta o status real da sessão no backend
+      const response = await api.get(`/stripe/payment-status/${paymentId}`);
       
       return {
-        id: response.data.id,
-        status: response.data.status,
+        id: response.data.sessionId || paymentId,
+        status: mapStripeStatusToGeneric(response.data.paymentStatus, response.data.orderStatus),
         amount: response.data.amount,
         paidAt: response.data.paidAt ? new Date(response.data.paidAt) : undefined,
-        metadata: response.data.metadata,
+        metadata: {
+          currency: response.data.currency,
+          customerEmail: response.data.customerEmail,
+          orderStatus: response.data.orderStatus,
+        },
       };
     } catch (error) {
       console.error('Erro ao verificar pagamento Stripe:', error);
       throw new Error('Falha ao verificar pagamento');
     }
+  }
+}
+
+// Converte status do Stripe/ordem para o enum genérico do app
+function mapStripeStatusToGeneric(paymentStatus?: string, orderStatus?: string): 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded' {
+  // Prioriza status da ordem no nosso banco quando disponível
+  if (orderStatus) {
+    if (orderStatus === 'completed') return 'completed';
+    if (orderStatus === 'pending') return 'pending';
+    if (orderStatus === 'failed') return 'failed';
+    if (orderStatus === 'cancelled') return 'cancelled';
+    if (orderStatus === 'refunded') return 'refunded';
+  }
+
+  // Fallback para status da sessão do Stripe
+  switch (paymentStatus) {
+    case 'paid':
+    case 'complete':
+      return 'completed';
+    case 'unpaid':
+    case 'no_payment_required':
+      return 'pending';
+    case 'expired':
+      return 'failed';
+    case 'open':
+      return 'processing';
+    default:
+      return 'pending';
   }
 }
 

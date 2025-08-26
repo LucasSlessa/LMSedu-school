@@ -133,15 +133,9 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     try {
       await enrollmentsAPI.updateProgress(courseId, progressPercentage);
       
-      // Atualizar estado local
-      const { enrollments } = get();
-      const updatedEnrollments = enrollments.map(enrollment => 
-        enrollment.course.id === courseId 
-          ? { ...enrollment, progressPercentage }
-          : enrollment
-      );
-      
-      set({ enrollments: updatedEnrollments });
+      // Recarregar matrículas do servidor para garantir consistência
+      const freshEnrollments = await enrollmentsAPI.getAll();
+      set({ enrollments: freshEnrollments });
       return true;
     } catch (error) {
       console.error('Erro ao atualizar progresso:', error);

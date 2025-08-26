@@ -131,13 +131,22 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
 // Webhook do Stripe
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  console.log('🔔 Webhook recebido:', req.headers['stripe-signature'] ? 'Assinado' : 'Não assinado');
+  
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      console.log('⚠️  STRIPE_WEBHOOK_SECRET não configurado, processando sem verificação');
+      event = JSON.parse(req.body);
+    } else {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    }
+    
+    console.log('📦 Evento Stripe:', event.type);
   } catch (err) {
-    console.error('Erro na verificação do webhook:', err.message);
+    console.error('❌ Erro na verificação do webhook:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -145,19 +154,54 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   try {
     switch (event.type) {
       case 'checkout.session.completed':
+        console.log('✅ Processando checkout.session.completed');
         await handleCheckoutCompleted(event.data.object);
         break;
       case 'payment_intent.succeeded':
+        console.log('✅ Processando payment_intent.succeeded');
         await handlePaymentSucceeded(event.data.object);
         break;
       default:
-        console.log(`Evento não tratado: ${event.type}`);
+        console.log(`ℹ️  Evento não tratado: ${event.type}`);
     }
 
     res.json({ received: true });
   } catch (error) {
-    console.error('Erro ao processar webhook:', error);
+    console.error('❌ Erro ao processar webhook:', error);
     res.status(500).json({ error: 'Erro ao processar webhook' });
+  }
+});
+
+// Rota para forçar criação de matrícula (desenvolvimento)
+router.post('/force-enrollment', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID é obrigatório' });
+    }
+
+    console.log('🔄 Forçando criação de matrícula para sessão:', sessionId);
+
+    // Buscar sessão no Stripe
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Pagamento não foi confirmado' });
+    }
+
+    // Processar matrícula
+    await handleCheckoutCompleted(session);
+    
+    res.json({ 
+      message: 'Matrícula criada com sucesso',
+      sessionId: session.id,
+      paymentStatus: session.payment_status
+    });
+
+  } catch (error) {
+    console.error('❌ Erro ao forçar matrícula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 

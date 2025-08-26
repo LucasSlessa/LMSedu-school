@@ -7,6 +7,8 @@ const router = express.Router();
 // Listar matrículas do usuário
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    console.log('🔍 Buscando matrículas para usuário:', req.user.id);
+    
     const result = await executeQuery(`
       SELECT 
         e.*,
@@ -25,6 +27,14 @@ router.get('/', authenticateToken, async (req, res) => {
       WHERE e.user_id = $1
       ORDER BY e.created_at DESC
     `, [req.user.id]);
+
+    console.log('📚 Matrículas encontradas:', result.rows.length);
+    console.log('📋 Dados das matrículas:', result.rows.map(row => ({
+      id: row.id,
+      courseId: row.course_id,
+      courseTitle: row.title,
+      status: row.status
+    })));
 
     const enrollments = result.rows.map(row => ({
       id: row.id,
@@ -49,7 +59,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(enrollments);
   } catch (error) {
-    console.error('Erro ao buscar matrículas:', error);
+    console.error('❌ Erro ao buscar matrículas:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -79,28 +89,28 @@ router.get('/:courseId/progress', authenticateToken, async (req, res) => {
 router.put('/:courseId/progress', authenticateToken, async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { progressPercentage } = req.body;
+    let { progressPercentage } = req.body;
+
+    // Coagir para número
+    progressPercentage = Number(progressPercentage);
 
     // Validar progresso
-    if (progressPercentage < 0 || progressPercentage > 100) {
+    if (Number.isNaN(progressPercentage) || progressPercentage < 0 || progressPercentage > 100) {
       return res.status(400).json({ error: 'Progresso deve estar entre 0 e 100' });
     }
 
-    const updateData = {
-      progress_percentage: progressPercentage
-    };
+    // Montar SET dinâmico
+    const setParts = ['progress_percentage = $3'];
+    const values = [req.user.id, courseId, progressPercentage];
 
-    // Se chegou a 100%, marcar como completo
     if (progressPercentage >= 100) {
-      updateData.status = 'completed';
-      updateData.completed_at = 'NOW()';
+      setParts.push(`status = $${values.length + 1}`);
+      values.push('completed');
+      // completed_at com NOW() diretamente (não como parâmetro)
+      setParts.push('completed_at = NOW()');
     }
 
-    const setClause = Object.keys(updateData)
-      .map((key, index) => `${key} = $${index + 3}`)
-      .join(', ');
-
-    const values = [req.user.id, courseId, ...Object.values(updateData)];
+    const setClause = setParts.join(', ');
 
     const result = await executeQuery(`
       UPDATE enrollments SET ${setClause}, updated_at = NOW()

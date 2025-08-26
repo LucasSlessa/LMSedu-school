@@ -7,7 +7,7 @@ import { generateCertificatePDF } from '../utils/certificateGenerator';
 
 export const MyCourses: React.FC = () => {
   const { user } = useAuthStore();
-  const { getPurchasedCourses, progress } = useCourseStore();
+  const { getPurchasedCourses, enrollments, fetchUserEnrollments } = useCourseStore();
   const location = useLocation();
   const [notification, setNotification] = useState<string | null>(null);
   const [generatingCertificate, setGeneratingCertificate] = useState<string | null>(null);
@@ -20,16 +20,21 @@ export const MyCourses: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [location]);
+
+  // Buscar matrículas quando o componente montar
+  useEffect(() => {
+    if (user) {
+      fetchUserEnrollments();
+    }
+  }, [user, fetchUserEnrollments]);
   
   if (!user) {
     return null;
   }
   
-  const purchasedCourses = getPurchasedCourses(user.id);
-  const userProgress = (progress || []).filter(p => p.userId === user.id);
-  
+  const purchasedCourses = getPurchasedCourses();
   const getCourseProgress = (courseId: string) => {
-    return userProgress.find(p => p.courseId === courseId);
+    return enrollments.find(e => e.course.id === courseId)?.progressPercentage ?? 0;
   };
   
   const formatPrice = (price: number) => {
@@ -40,8 +45,8 @@ export const MyCourses: React.FC = () => {
   };
   
   const handleDownloadCertificate = async (course: any) => {
-    const courseProgress = getCourseProgress(course.id);
-    const isCompleted = courseProgress?.completionPercentage === 100;
+    const completionPercentage = getCourseProgress(course.id);
+    const isCompleted = completionPercentage === 100;
     
     if (!isCompleted) {
       alert('Você precisa concluir 100% do curso para baixar o certificado.');
@@ -106,15 +111,14 @@ export const MyCourses: React.FC = () => {
         <div className="flex items-center space-x-6 text-sm text-gray-600">
           <span>{purchasedCourses.length} curso{purchasedCourses.length !== 1 ? 's' : ''} adquirido{purchasedCourses.length !== 1 ? 's' : ''}</span>
           <span>•</span>
-          <span>{userProgress.filter(p => p.completionPercentage === 100).length} concluído{userProgress.filter(p => p.completionPercentage === 100).length !== 1 ? 's' : ''}</span>
+          <span>{enrollments.filter(e => e.progressPercentage === 100).length} concluído{enrollments.filter(e => e.progressPercentage === 100).length !== 1 ? 's' : ''}</span>
         </div>
       </div>
       
       {/* Lista de Cursos */}
       <div className="space-y-6">
         {purchasedCourses.map((course) => {
-          const courseProgress = getCourseProgress(course.id);
-          const completionPercentage = courseProgress?.completionPercentage || 0;
+          const completionPercentage = getCourseProgress(course.id);
           const isCompleted = completionPercentage === 100;
           
           return (
