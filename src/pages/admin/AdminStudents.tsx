@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Mail, Calendar, BookOpen, Award, Eye, MoreVertical, Loader2 } from 'lucide-react';
+import { Search, Filter, Mail, Calendar, BookOpen, Award, Eye, MoreVertical, Loader2, KeyRound, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useCourseStore } from '../../store/courseStore';
 import { usersAPI, enrollmentsAPI } from '../../lib/api';
@@ -23,7 +23,16 @@ export const AdminStudents: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+
+  // UI state for modals/actions
+  const [modalType, setModalType] = useState<'none' | 'password' | 'grant' | 'certificate'>('none');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
+  const [userEnrollments, setUserEnrollments] = useState<any[]>([]);
+  const [selectedCertCourseIds, setSelectedCertCourseIds] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   
   useEffect(() => {
     const fetchUsers = async () => {
@@ -47,11 +56,11 @@ export const AdminStudents: React.FC = () => {
   
   const getStudentStats = (studentId: string) => {
     // Placeholder até implementarmos fetch de matrículas por usuário
-    const userEnrollments = enrollments; // TODO: filtrar por userId quando disponível no store
-    const coursesEnrolled = userEnrollments.length;
-    const coursesCompleted = userEnrollments.filter(e => e.status === 'completed').length;
-    const totalSpent = userEnrollments.reduce((sum, e) => sum + (e.course.price || 0), 0);
-    const lastActivity = userEnrollments.length > 0 ? new Date(Math.max(...userEnrollments.map(e => new Date(e.createdAt).getTime()))) : null;
+    const userEnrollmentsList = enrollments; // TODO: filtrar por userId quando disponível no store
+    const coursesEnrolled = userEnrollmentsList.length;
+    const coursesCompleted = userEnrollmentsList.filter(e => e.status === 'completed').length;
+    const totalSpent = userEnrollmentsList.reduce((sum, e) => sum + (e.course.price || 0), 0);
+    const lastActivity = userEnrollmentsList.length > 0 ? new Date(Math.max(...userEnrollmentsList.map(e => new Date(e.createdAt).getTime()))) : null;
     
     return {
       coursesEnrolled,
@@ -114,30 +123,92 @@ export const AdminStudents: React.FC = () => {
     }
   };
 
-  const grantCourse = async (user: User) => {
-    if (!selectedCourseId) {
-      alert('Selecione um curso');
-      return;
-    }
+  // ===== Modals handlers =====
+  const openPasswordModal = async (user: User) => {
+    if (currentUser?.role !== 'admin') return;
+    setSelectedUser(user);
+    setTempPassword(null);
+    setFeedback(null);
+    setModalType('password');
+  };
+
+  const generateTempPassword = async () => {
+    if (!selectedUser) return;
     try {
-      await enrollmentsAPI.adminGrant(user.id, selectedCourseId);
-      alert('Curso liberado para o aluno');
-    } catch (err) {
-      alert('Erro ao liberar curso');
+      setSubmitting(true);
+      const res = await usersAPI.resetPasswordTemp(selectedUser.id);
+      setTempPassword(res.tempPassword);
+      setFeedback('Senha temporária gerada com sucesso.');
+    } catch (e) {
+      setFeedback('Erro ao gerar senha temporária.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const completeCourse = async (user: User) => {
-    if (!selectedCourseId) {
-      alert('Selecione um curso');
-      return;
-    }
+  const openGrantCoursesModal = (user: User) => {
+    if (currentUser?.role !== 'admin') return;
+    setSelectedUser(user);
+    setSelectedCourseIds([]);
+    setFeedback(null);
+    setModalType('grant');
+  };
+
+  const confirmGrantCourses = async () => {
+    if (!selectedUser || selectedCourseIds.length === 0) return;
     try {
-      await enrollmentsAPI.adminComplete(user.id, selectedCourseId);
-      alert('Curso concluído e certificado liberado');
-    } catch (err) {
-      alert('Erro ao concluir curso');
+      setSubmitting(true);
+      // Atribui cada curso selecionado ao usuário
+      for (const courseId of selectedCourseIds) {
+        await enrollmentsAPI.adminGrant(selectedUser.id, courseId);
+      }
+      setFeedback('Cursos liberados com sucesso.');
+    } catch (e) {
+      setFeedback('Erro ao liberar cursos.');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const openCertificatesModal = async (user: User) => {
+    if (currentUser?.role !== 'admin') return;
+    setSelectedUser(user);
+    setSelectedCertCourseIds([]);
+    setFeedback(null);
+    try {
+      setSubmitting(true);
+      const list = await enrollmentsAPI.adminListUser(user.id);
+      setUserEnrollments(list);
+    } catch (e) {
+      setUserEnrollments([]);
+    } finally {
+      setSubmitting(false);
+      setModalType('certificate');
+    }
+  };
+
+  const confirmGrantCertificates = async () => {
+    if (!selectedUser || selectedCertCourseIds.length === 0) return;
+    try {
+      setSubmitting(true);
+      for (const courseId of selectedCertCourseIds) {
+        await enrollmentsAPI.adminComplete(selectedUser.id, courseId);
+      }
+      setFeedback('Certificados liberados com sucesso.');
+    } catch (e) {
+      setFeedback('Erro ao liberar certificados.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalType('none');
+    setSelectedUser(null);
+    setTempPassword(null);
+    setSelectedCourseIds([]);
+    setSelectedCertCourseIds([]);
+    setFeedback(null);
   };
 
   if (loading) {
@@ -165,83 +236,10 @@ export const AdminStudents: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Gerenciar Alunos</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Gerenciar Usuários</h1>
         <p className="mt-2 text-gray-600">
-          {filteredStudents.length} aluno{filteredStudents.length !== 1 ? 's' : ''} encontrado{filteredStudents.length !== 1 ? 's' : ''}
+          {filteredStudents.length} usuário{filteredStudents.length !== 1 ? 's' : ''} encontrado{filteredStudents.length !== 1 ? 's' : ''}
         </p>
-      </div>
-      
-      {/* Seletor de curso para ações */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 mb-6 flex items-center space-x-3">
-        <label className="text-sm text-gray-700">Curso para ações:</label>
-        <select
-          value={selectedCourseId}
-          onChange={(e) => setSelectedCourseId(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value="">Selecione um curso</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>{c.title}</option>
-          ))}
-        </select>
-      </div>
-      
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="bg-blue-100 p-3 rounded-lg">
-              <BookOpen className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
-              <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="bg-green-100 p-3 rounded-lg">
-              <Award className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Admins</p>
-              <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.role === 'admin').length}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="bg-purple-100 p-3 rounded-lg">
-              <Calendar className="h-6 w-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Novos este Mês</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {users.filter(s => {
-                  const createdDate = new Date(s.created_at);
-                  const now = new Date();
-                  return createdDate.getMonth() === now.getMonth() && 
-                         createdDate.getFullYear() === now.getFullYear();
-                }).length}
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center">
-            <div className="bg-orange-100 p-3 rounded-lg">
-              <Mail className="h-6 w-6 text-orange-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total de Matrículas</p>
-              <p className="text-2xl font-bold text-gray-900">{enrollments.length}</p>
-            </div>
-          </div>
-        </div>
       </div>
       
       {/* Filtros */}
@@ -268,7 +266,7 @@ export const AdminStudents: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="all">Todos os Status</option>
+            <option value="all">Todos</option>
             <option value="active">Com matrículas</option>
             <option value="inactive">Sem matrículas</option>
           </select>
@@ -281,18 +279,10 @@ export const AdminStudents: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Usuário
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Papel
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Criado em
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Papel</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Criado em</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -302,32 +292,35 @@ export const AdminStudents: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-600 font-medium">
-                            {user.name.charAt(0).toUpperCase()}
-                          </span>
+                          <span className="text-blue-600 font-medium">{user.name.charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {user.email}
-                          </div>
+                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
-                        {user.role}
-                      </span>
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">{user.role}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {new Date(user.created_at).toLocaleDateString('pt-BR')}
-                      </div>
+                      <div className="text-sm text-gray-900">{new Date(user.created_at).toLocaleDateString('pt-BR')}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
+                        {/* Consultar senha (apenas admin e não para si mesmo) */}
+                        {currentUser?.role === 'admin' && currentUser?.id !== user.id && (
+                          <button
+                            onClick={() => openPasswordModal(user)}
+                            className="text-amber-700 hover:text-amber-800 p-1 rounded text-sm border border-amber-300 px-3 py-1 flex items-center space-x-1"
+                            title="Consultar senha (gera temporária)"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                            <span>Consultar Senha</span>
+                          </button>
+                        )}
+
+                        {/* Alternar papel */}
                         <button
                           onClick={() => toggleRole(user)}
                           className="text-purple-600 hover:text-purple-700 p-1 rounded text-sm border border-purple-200 px-3 py-1 disabled:opacity-50"
@@ -337,20 +330,20 @@ export const AdminStudents: React.FC = () => {
                           Alternar Papel
                         </button>
 
+                        {/* Liberar curso */}
                         <button
-                          onClick={() => grantCourse(user)}
+                          onClick={() => openGrantCoursesModal(user)}
                           className="text-blue-600 hover:text-blue-700 p-1 rounded text-sm border border-blue-200 px-3 py-1"
-                          title="Liberar curso para o aluno"
-                          disabled={!selectedCourseId}
+                          title="Liberar curso para o usuário"
                         >
                           Liberar Curso
                         </button>
 
+                        {/* Liberar certificado */}
                         <button
-                          onClick={() => completeCourse(user)}
+                          onClick={() => openCertificatesModal(user)}
                           className="text-green-600 hover:text-green-700 p-1 rounded text-sm border border-green-200 px-3 py-1"
-                          title="Marcar curso como concluído e liberar certificado"
-                          disabled={!selectedCourseId}
+                          title="Liberar certificado para o usuário"
                         >
                           Liberar Certificado
                         </button>
@@ -362,17 +355,123 @@ export const AdminStudents: React.FC = () => {
             </tbody>
           </table>
         </div>
-        
-        {filteredStudents.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 mb-4">
-              <Search className="mx-auto h-12 w-12" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum aluno encontrado</h3>
-            <p className="text-gray-500">Tente ajustar os filtros de busca</p>
-          </div>
-        )}
       </div>
+
+      {/* ===== Modals Section ===== */}
+      {modalType !== 'none' && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-xl rounded-xl shadow-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {modalType === 'password' && 'Consultar senha (gera temporária)'}
+                {modalType === 'grant' && 'Liberar cursos para o usuário'}
+                {modalType === 'certificate' && 'Liberar certificados para o usuário'}
+              </h3>
+              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {modalType === 'password' && (
+                <div>
+                  <p className="text-sm text-gray-700 mb-3">Usuário: <span className="font-medium">{selectedUser?.name}</span> ({selectedUser?.email})</p>
+                  <button
+                    onClick={generateTempPassword}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Gerando...' : 'Gerar senha temporária'}
+                  </button>
+                  {tempPassword && (
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center space-x-2">
+                      <KeyRound className="h-4 w-4 text-amber-700" />
+                      <div>
+                        <p className="text-sm text-gray-800">Senha temporária:</p>
+                        <p className="font-mono text-lg">{tempPassword}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {modalType === 'grant' && (
+                <div>
+                  <p className="text-sm text-gray-700 mb-3">Selecione um ou mais cursos para liberar para <span className="font-medium">{selectedUser?.name}</span></p>
+                  <div className="max-h-64 overflow-auto border border-gray-200 rounded-lg">
+                    <ul>
+                      {courses.map((c) => (
+                        <li key={c.id} className="flex items-center px-4 py-2 border-b border-gray-100 last:border-b-0">
+                          <input
+                            type="checkbox"
+                            className="mr-3"
+                            checked={selectedCourseIds.includes(c.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedCourseIds(prev => [...prev, c.id]);
+                              else setSelectedCourseIds(prev => prev.filter(id => id !== c.id));
+                            }}
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{c.title}</p>
+                            <p className="text-xs text-gray-500">{c.level} • {c.duration}h</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-4 flex items-center justify-end space-x-2">
+                    {feedback && <span className="text-sm text-green-700 flex items-center"><CheckCircle2 className="h-4 w-4 mr-1" />{feedback}</span>}
+                    <button onClick={closeModal} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700">Cancelar</button>
+                    <button
+                      onClick={confirmGrantCourses}
+                      className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      disabled={submitting || selectedCourseIds.length === 0}
+                    >
+                      {submitting ? 'Liberando...' : 'Liberar Cursos'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {modalType === 'certificate' && (
+                <div>
+                  <p className="text-sm text-gray-700 mb-3">Selecione cursos para liberar certificado para <span className="font-medium">{selectedUser?.name}</span></p>
+                  <div className="max-h-64 overflow-auto border border-gray-200 rounded-lg">
+                    <ul>
+                      {userEnrollments.map((e) => (
+                        <li key={e.course.id} className="flex items-center px-4 py-2 border-b border-gray-100 last:border-b-0">
+                          <input
+                            type="checkbox"
+                            className="mr-3"
+                            checked={selectedCertCourseIds.includes(e.course.id)}
+                            onChange={(ev) => {
+                              if (ev.target.checked) setSelectedCertCourseIds(prev => [...prev, e.course.id]);
+                              else setSelectedCertCourseIds(prev => prev.filter(id => id !== e.course.id));
+                            }}
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{e.course.title}</p>
+                            <p className="text-xs text-gray-500">Status: {e.status} • Progresso: {Math.round(e.progressPercentage || 0)}%</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-4 flex items-center justify-end space-x-2">
+                    {feedback && <span className="text-sm text-green-700 flex items-center"><CheckCircle2 className="h-4 w-4 mr-1" />{feedback}</span>}
+                    <button onClick={closeModal} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700">Cancelar</button>
+                    <button
+                      onClick={confirmGrantCertificates}
+                      className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                      disabled={submitting || selectedCertCourseIds.length === 0}
+                    >
+                      {submitting ? 'Liberando...' : 'Liberar Certificados'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
