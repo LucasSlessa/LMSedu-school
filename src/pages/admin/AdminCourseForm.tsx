@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Plus, Trash2, Video, FileText, HelpCircle, Settings } 
 import { useCourseStore } from '../../store/courseStore';
 import { useCategoryStore } from '../../store/categoryStore';
 import { Course } from '../../types';
+import { coursesAPI } from '../../lib/api';
 import { QuizBuilder } from '../../components/admin/QuizBuilder';
 import { FileUploader } from '../../components/admin/FileUploader';
 import { ImageUploader } from '../../components/admin/ImageUploader';
@@ -79,6 +80,20 @@ export const AdminCourseForm: React.FC = () => {
     { value: 'pdf', label: 'Material PDF/PPT', icon: FileText, accept: '.pdf,application/pdf,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation' },
     { value: 'quiz', label: 'Questionário', icon: HelpCircle, accept: '' },
   ];
+
+  useEffect(() => {
+    if (isEditing && id) {
+      const fetchModules = async () => {
+        try {
+          const data = await coursesAPI.getModules(id);
+          setModules(data);
+        } catch (err) {
+          console.error('Erro ao carregar módulos:', err);
+        }
+      };
+      fetchModules();
+    }
+  }, [isEditing, id]);
   
 
   
@@ -109,25 +124,25 @@ export const AdminCourseForm: React.FC = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       setActiveTab('basic'); // Voltar para a aba básica se houver erros
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       const courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'> = {
         ...formData,
       };
-      
+
       if (isEditing && existingCourse) {
-        await updateCourse(existingCourse.id, courseData);
+        await updateCourse(existingCourse.id, courseData, modules);
       } else {
-        await addCourse(courseData);
+        await addCourse(courseData, modules);
       }
-      
+
       navigate('/admin/courses');
     } catch (error) {
       setErrors({ general: 'Erro ao salvar curso. Tente novamente.' });

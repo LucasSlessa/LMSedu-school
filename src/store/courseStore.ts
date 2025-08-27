@@ -20,6 +20,17 @@ interface Course {
   updatedAt: string;
 }
 
+interface CourseModule {
+  id: string;
+  title: string;
+  type: 'video' | 'pdf' | 'quiz';
+  content: string;
+  duration?: number;
+  order: number;
+  quizQuestions?: unknown[];
+  files?: unknown[];
+}
+
 interface Enrollment {
   id: string;
   status: 'active' | 'completed' | 'suspended' | 'cancelled';
@@ -37,10 +48,17 @@ interface CourseState {
   loading: boolean;
   
   // Course methods
-  fetchCourses: (params?: any) => Promise<void>;
+  fetchCourses: (params?: Record<string, string>) => Promise<void>;
   getCourseById: (id: string) => Course | undefined;
-  addCourse: (courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>) => Promise<void>;
-  updateCourse: (id: string, courseData: Partial<Course>) => Promise<void>;
+  addCourse: (
+    courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>,
+    modules: CourseModule[]
+  ) => Promise<void>;
+  updateCourse: (
+    id: string,
+    courseData: Partial<Course>,
+    modules: CourseModule[]
+  ) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   
   // Enrollment methods
@@ -55,7 +73,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   enrollments: [],
   loading: false,
   
-  fetchCourses: async (params?: any) => {
+  fetchCourses: async (params?: Record<string, string>) => {
     set({ loading: true });
     try {
       const courses = await coursesAPI.getAll(params);
@@ -70,9 +88,12 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     return get().courses.find(course => course.id === id);
   },
   
-  addCourse: async (courseData) => {
+  addCourse: async (
+    courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>,
+    modules: CourseModule[]
+  ) => {
     try {
-      const newCourse = await coursesAPI.create(courseData);
+      const newCourse = await coursesAPI.create(courseData, modules);
       set(state => ({
         courses: [...state.courses, newCourse]
       }));
@@ -81,12 +102,16 @@ export const useCourseStore = create<CourseState>((set, get) => ({
       throw error;
     }
   },
-  
-  updateCourse: async (id: string, courseData) => {
+
+  updateCourse: async (
+    id: string,
+    courseData: Partial<Course>,
+    modules: CourseModule[]
+  ) => {
     try {
-      const updatedCourse = await coursesAPI.update(id, courseData);
+      const updatedCourse = await coursesAPI.update(id, courseData, modules);
       set(state => ({
-        courses: state.courses.map(course => 
+        courses: state.courses.map(course =>
           course.id === id ? { ...course, ...updatedCourse } : course
         )
       }));

@@ -151,18 +151,22 @@ export const coursesAPI = {
     return apiRequest(`/courses/${id}`);
   },
 
-  create: async (courseData: any) => {
+  create: async (courseData: any, modules: any[] = []) => {
     return apiRequest('/courses', {
       method: 'POST',
-      body: JSON.stringify(courseData),
+      body: JSON.stringify({ ...courseData, modules }),
     });
   },
 
-  update: async (id: string, courseData: any) => {
+  update: async (id: string, courseData: any, modules: any[] = []) => {
     return apiRequest(`/courses/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(courseData),
+      body: JSON.stringify({ ...courseData, modules }),
     });
+  },
+
+  getModules: async (courseId: string) => {
+    return apiRequest(`/courses/${courseId}/modules`);
   },
 
   delete: async (id: string) => {
