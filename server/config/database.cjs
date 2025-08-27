@@ -24,21 +24,42 @@ pool.on('error', (err) => {
 });
 
 // Função para executar queries com retry
+// Aceita uma query simples ou um array de queries (transação)
 const executeQuery = async (query, params = []) => {
   let retries = 3;
-  
+
   while (retries > 0) {
     try {
+      if (Array.isArray(query)) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const results = [];
+          for (const q of query) {
+            const text = q.text || q.query;
+            const values = q.values || q.params || [];
+            results.push(await client.query(text, values));
+          }
+          await client.query('COMMIT');
+          return results;
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+
       const result = await pool.query(query, params);
       return result;
     } catch (error) {
       retries--;
       console.error(`❌ Erro na query (tentativas restantes: ${retries}):`, error.message);
-      
+
       if (retries === 0) {
         throw error;
       }
-      
+
       // Aguardar um pouco antes de tentar novamente
       await new Promise(resolve => setTimeout(resolve, 1000));
     }

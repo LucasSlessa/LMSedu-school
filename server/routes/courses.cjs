@@ -85,16 +85,49 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     
     const result = await executeQuery(`
-      SELECT 
+      SELECT
         c.*,
         cat.name as category_name,
         cat.color as category_color,
         u.name as instructor_name,
-        u.email as instructor_email
+        u.email as instructor_email,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', m.id,
+              'title', m.title,
+              'description', m.description,
+              'sortOrder', m.sort_order,
+              'lessons', COALESCE(m.lessons, '[]'::json)
+            ) ORDER BY m.sort_order
+          ) FILTER (WHERE m.id IS NOT NULL), '[]'::json
+        ) AS modules
       FROM courses c
       LEFT JOIN categories cat ON c.category_id = cat.id
       LEFT JOIN users u ON c.instructor_id = u.id
+      LEFT JOIN (
+        SELECT
+          cm.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', cl.id,
+                'title', cl.title,
+                'description', cl.description,
+                'contentType', cl.content_type,
+                'contentUrl', cl.content_url,
+                'durationMinutes', cl.duration_minutes,
+                'sortOrder', cl.sort_order,
+                'isFree', cl.is_free
+              ) ORDER BY cl.sort_order
+            ) FILTER (WHERE cl.id IS NOT NULL), '[]'::json
+          ) AS lessons
+        FROM course_modules cm
+        LEFT JOIN course_lessons cl ON cl.module_id = cm.id
+        GROUP BY cm.id
+      ) m ON m.course_id = c.id
       WHERE c.id = $1 AND c.status = 'published'
+      GROUP BY c.id, cat.name, cat.color, u.name, u.email
     `, [id]);
 
     if (result.rows.length === 0) {
@@ -122,7 +155,8 @@ router.get('/:id', async (req, res) => {
       whatYouLearn: row.what_you_learn,
       targetAudience: row.target_audience,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      modules: row.modules || []
     };
 
     res.json(course);
@@ -264,6 +298,202 @@ router.delete('/:id', authenticateToken, requireRole(['admin', 'instructor']), a
     res.json({ message: 'Curso deletado com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar curso:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Criar módulo
+router.post('/:id/modules', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, sortOrder } = req.body;
+
+    const courseCheck = await executeQuery(
+      'SELECT instructor_id FROM courses WHERE id = $1',
+      [id]
+    );
+
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Curso não encontrado' });
+    }
+
+    if (req.user.role !== 'admin' && courseCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para adicionar módulos neste curso' });
+    }
+
+    const result = await executeQuery(
+      `INSERT INTO course_modules (course_id, title, description, sort_order)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [id, title, description, sortOrder || 0]
+    );
+
+    res.status(201).json({ message: 'Módulo criado com sucesso', module: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao criar módulo:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Atualizar módulo
+router.put('/modules/:id', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, sortOrder } = req.body;
+
+    const moduleCheck = await executeQuery(
+      `SELECT c.instructor_id FROM course_modules m
+       JOIN courses c ON m.course_id = c.id
+       WHERE m.id = $1`,
+      [id]
+    );
+
+    if (moduleCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Módulo não encontrado' });
+    }
+
+    if (req.user.role !== 'admin' && moduleCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para editar este módulo' });
+    }
+
+    const result = await executeQuery(
+      `UPDATE course_modules SET title = $1, description = $2, sort_order = $3, updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [title, description, sortOrder, id]
+    );
+
+    res.json({ message: 'Módulo atualizado com sucesso', module: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar módulo:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Deletar módulo
+router.delete('/modules/:id', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const moduleCheck = await executeQuery(
+      `SELECT c.instructor_id FROM course_modules m
+       JOIN courses c ON m.course_id = c.id
+       WHERE m.id = $1`,
+      [id]
+    );
+
+    if (moduleCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Módulo não encontrado' });
+    }
+
+    if (req.user.role !== 'admin' && moduleCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para deletar este módulo' });
+    }
+
+    await executeQuery('DELETE FROM course_modules WHERE id = $1', [id]);
+
+    res.json({ message: 'Módulo deletado com sucesso' });
+  } catch (error) {
+    console.error('Erro ao deletar módulo:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Criar aula
+router.post('/modules/:moduleId/lessons', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { moduleId } = req.params;
+    const { title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree } = req.body;
+
+    const moduleCheck = await executeQuery(
+      `SELECT c.instructor_id FROM course_modules m
+       JOIN courses c ON m.course_id = c.id
+       WHERE m.id = $1`,
+      [moduleId]
+    );
+
+    if (moduleCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Módulo não encontrado' });
+    }
+
+    if (req.user.role !== 'admin' && moduleCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para adicionar aulas neste módulo' });
+    }
+
+    const result = await executeQuery(
+      `INSERT INTO course_lessons (module_id, title, description, content_type, content_url, duration_minutes, sort_order, is_free)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [moduleId, title, description, contentType, contentUrl, durationMinutes || 0, sortOrder || 0, isFree || false]
+    );
+
+    res.status(201).json({ message: 'Aula criada com sucesso', lesson: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao criar aula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Atualizar aula
+router.put('/lessons/:id', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree } = req.body;
+
+    const lessonCheck = await executeQuery(
+      `SELECT c.instructor_id FROM course_lessons l
+       JOIN course_modules m ON l.module_id = m.id
+       JOIN courses c ON m.course_id = c.id
+       WHERE l.id = $1`,
+      [id]
+    );
+
+    if (lessonCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Aula não encontrada' });
+    }
+
+    if (req.user.role !== 'admin' && lessonCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para editar esta aula' });
+    }
+
+    const result = await executeQuery(
+      `UPDATE course_lessons SET
+         title = $1, description = $2, content_type = $3, content_url = $4,
+         duration_minutes = $5, sort_order = $6, is_free = $7, updated_at = NOW()
+       WHERE id = $8 RETURNING *`,
+      [title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree, id]
+    );
+
+    res.json({ message: 'Aula atualizada com sucesso', lesson: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar aula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Deletar aula
+router.delete('/lessons/:id', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const lessonCheck = await executeQuery(
+      `SELECT c.instructor_id FROM course_lessons l
+       JOIN course_modules m ON l.module_id = m.id
+       JOIN courses c ON m.course_id = c.id
+       WHERE l.id = $1`,
+      [id]
+    );
+
+    if (lessonCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Aula não encontrada' });
+    }
+
+    if (req.user.role !== 'admin' && lessonCheck.rows[0].instructor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Sem permissão para deletar esta aula' });
+    }
+
+    await executeQuery('DELETE FROM course_lessons WHERE id = $1', [id]);
+
+    res.json({ message: 'Aula deletada com sucesso' });
+  } catch (error) {
+    console.error('Erro ao deletar aula:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
