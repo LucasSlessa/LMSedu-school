@@ -151,6 +151,10 @@ export const coursesAPI = {
     return apiRequest(`/courses/${id}`);
   },
 
+  getModules: async (id: string) => {
+    return apiRequest(`/courses/${id}/modules`);
+  },
+
   create: async (courseData: any) => {
     return apiRequest('/courses', {
       method: 'POST',

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useCourseStore } from '../store/courseStore';
 import { useAuthStore } from '../store/authStore';
+import { coursesAPI } from '../lib/api';
 import { generateCertificatePDF } from '../utils/certificateGenerator';
 
 interface CourseModule {
@@ -32,20 +33,45 @@ export const CourseViewer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
   const { getCourseById, getPurchasedCourses, getUserProgress, updateProgress } = useCourseStore();
+  const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
   const [activeModule, setActiveModule] = useState<CourseModule | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<{ [key: string]: string }>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [isGeneratingCertificate, setIsGeneratingCertificate] = useState(false);
 
+  useEffect(() => {
+    if (!id) return;
+    const fetchModules = async () => {
+      try {
+        const modules = await coursesAPI.getModules(id);
+        setCourseModules(modules);
+        const nextModule = modules.find((m: CourseModule) => !m.completed && !m.locked) || modules[0];
+        setActiveModule(nextModule);
+      } catch (error) {
+        console.error('Erro ao buscar módulos:', error);
+      }
+    };
+
+    fetchModules();
+  }, [id]);
+
+  useEffect(() => {
+    if (!activeModule && courseModules.length > 0) {
+      // Encontrar o primeiro módulo não completado ou o primeiro se todos estiverem completos
+      const nextModule = courseModules.find(m => !m.completed && !m.locked) || courseModules[0];
+      setActiveModule(nextModule);
+    }
+  }, [courseModules, activeModule]);
+
   if (!id || !user) {
     return <Navigate to="/courses" replace />;
   }
 
   const course = getCourseById(id);
-  const purchasedCourses = getPurchasedCourses(user.id);
+  const purchasedCourses = getPurchasedCourses();
   const hasPurchased = purchasedCourses.some(c => c.id === id);
-  const userProgress = getUserProgress(user.id, id);
+  const userProgress = getUserProgress(id);
 
   if (!course) {
     return <Navigate to="/courses" replace />;
@@ -55,104 +81,29 @@ export const CourseViewer: React.FC = () => {
     return <Navigate to={`/courses/${id}`} replace />;
   }
 
-  // Módulos do curso (simulados - em produção viriam do banco)
-  const courseModules: CourseModule[] = [
-    {
-      id: '1',
-      title: 'Introdução ao Curso',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 15,
-      completed: userProgress?.completedContent.includes('1') || false,
-      locked: false,
-    },
-    {
-      id: '2',
-      title: 'Conceitos Fundamentais',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 25,
-      completed: userProgress?.completedContent.includes('2') || false,
-      locked: !userProgress?.completedContent.includes('1'),
-    },
-    {
-      id: '3',
-      title: 'Material de Apoio - Capítulo 1',
-      type: 'pdf',
-      content: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-      completed: userProgress?.completedContent.includes('3') || false,
-      locked: !userProgress?.completedContent.includes('2'),
-    },
-    {
-      id: '4',
-      title: 'Projeto Prático 1',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 45,
-      completed: userProgress?.completedContent.includes('4') || false,
-      locked: !userProgress?.completedContent.includes('3'),
-    },
-    {
-      id: '5',
-      title: 'Quiz - Teste seus Conhecimentos',
-      type: 'quiz',
-      content: '',
-      completed: userProgress?.completedContent.includes('5') || false,
-      locked: !userProgress?.completedContent.includes('4'),
-    },
-    {
-      id: '6',
-      title: 'Conceitos Avançados',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 35,
-      completed: userProgress?.completedContent.includes('6') || false,
-      locked: !userProgress?.completedContent.includes('5'),
-    },
-    {
-      id: '7',
-      title: 'Projeto Final',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 60,
-      completed: userProgress?.completedContent.includes('7') || false,
-      locked: !userProgress?.completedContent.includes('6'),
-    },
-    {
-      id: '8',
-      title: 'Avaliação Final',
-      type: 'quiz',
-      content: '',
-      completed: userProgress?.completedContent.includes('8') || false,
-      locked: !userProgress?.completedContent.includes('7'),
-    },
-  ];
-
   const completedModules = courseModules.filter(m => m.completed).length;
   const totalModules = courseModules.length;
-  const progressPercentage = (completedModules / totalModules) * 100;
+  const progressPercentage = totalModules > 0
+    ? (completedModules / totalModules) * 100
+    : userProgress?.progressPercentage || 0;
   const isCompleted = progressPercentage === 100;
 
-  useEffect(() => {
-    if (!activeModule && courseModules.length > 0) {
-      // Encontrar o primeiro módulo não completado ou o primeiro se todos estiverem completos
-      const nextModule = courseModules.find(m => !m.completed && !m.locked) || courseModules[0];
-      setActiveModule(nextModule);
-    }
-  }, []);
-
-  const handleModuleComplete = (moduleId: string) => {
-    updateProgress(user.id, id, moduleId);
-    
-    // Atualizar estado local
+  const handleModuleComplete = async (moduleId: string) => {
     const moduleIndex = courseModules.findIndex(m => m.id === moduleId);
     if (moduleIndex !== -1) {
-      courseModules[moduleIndex].completed = true;
-      
+      const updatedModules = [...courseModules];
+      updatedModules[moduleIndex].completed = true;
+
       // Desbloquear próximo módulo
-      if (moduleIndex + 1 < courseModules.length) {
-        courseModules[moduleIndex + 1].locked = false;
+      if (moduleIndex + 1 < updatedModules.length) {
+        updatedModules[moduleIndex + 1].locked = false;
       }
+
+      setCourseModules(updatedModules);
+
+      const completed = updatedModules.filter(m => m.completed).length;
+      const progress = (completed / updatedModules.length) * 100;
+      await updateProgress(id, progress);
     }
   };
 
