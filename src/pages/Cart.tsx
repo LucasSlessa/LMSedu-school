@@ -4,10 +4,9 @@ import { useEffect } from 'react';
 import { ShoppingCart, Trash2, ArrowRight, ShoppingBag, CreditCard } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
-import { ordersAPI } from '../lib/api';
 
 export const Cart: React.FC = () => {
-  const { items, removeFromCart, clearCart, getTotal, fetchCartItems } = useCartStore();
+  const { items, removeFromCart, clearCart, getTotal, fetchCartItems, checkoutCart } = useCartStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
@@ -28,8 +27,7 @@ export const Cart: React.FC = () => {
     if (!user || items.length === 0) return;
     
     try {
-      const order = await ordersAPI.create();
-      window.location.href = order.order.paymentUrl;
+      await checkoutCart();
     } catch (error) {
       console.error('Erro no checkout:', error);
       alert('Erro ao processar pagamento. Tente novamente.');
@@ -38,8 +36,8 @@ export const Cart: React.FC = () => {
 
   const handleBuyNow = async (courseId: string) => {
     try {
-      const order = await ordersAPI.create();
-      window.location.href = order.order.paymentUrl;
+      // Redirecionar para a página de cursos para compra individual
+      navigate(`/courses/${courseId}`);
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
       alert('Erro ao processar pagamento. Tente novamente.');

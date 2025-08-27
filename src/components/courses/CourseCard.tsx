@@ -1,7 +1,7 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Clock, Users, ShoppingCart, CreditCard } from 'lucide-react';
+import { Star, Clock, Users, ShoppingCart, CreditCard, BookOpen } from 'lucide-react';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { stripeAPI } from '../../lib/api';
@@ -33,10 +33,36 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, showActions = tr
   const { user, isAuthenticated } = useAuthStore();
   const [isAdding, setIsAdding] = useState(false);
   const [isBuying, setIsBuying] = useState(false);
+  const [hasEnrollment, setHasEnrollment] = useState(false);
+  const [imageError, setImageError] = useState(false);
   
   const isInCart = items.some(item => item.course.id === course.id);
-  const canAddToCart = isAuthenticated && user?.role === 'student' && !isInCart;
+  const canAddToCart = isAuthenticated && user?.role === 'student' && !isInCart && !hasEnrollment;
+  const canBuy = isAuthenticated && user?.role === 'student' && !hasEnrollment;
   
+  // Verificar se o usuário já possui o curso
+  useEffect(() => {
+    const checkEnrollment = async () => {
+      if (isAuthenticated && user?.role === 'student') {
+        try {
+          const response = await fetch(`http://localhost:3001/api/enrollments/check/${course.id}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setHasEnrollment(data.hasEnrollment);
+          }
+        } catch (error) {
+          console.error('Erro ao verificar matrícula:', error);
+        }
+      }
+    };
+    
+    checkEnrollment();
+  }, [course.id, isAuthenticated, user?.role]);
+
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -59,16 +85,30 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, showActions = tr
       return;
     }
 
+    if (hasEnrollment) {
+      alert('Você já possui este curso!');
+      return;
+    }
+
     setIsBuying(true);
     try {
       const response = await stripeAPI.createCheckoutSession(course.id);
       window.location.href = response.url;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar checkout:', error);
-      alert('Erro ao processar pagamento. Tente novamente.');
+      if (error.message === 'Você já possui este curso') {
+        setHasEnrollment(true);
+        alert('Você já possui este curso!');
+      } else {
+        alert('Erro ao processar pagamento. Tente novamente.');
+      }
     } finally {
       setIsBuying(false);
     }
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
   };
   
   const formatPrice = (price: number) => {
@@ -103,16 +143,32 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, showActions = tr
         return level;
     }
   };
+
+  const isValidImage = (url: string) => {
+    try {
+      new URL(url);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
   
   return (
     <div className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group">
       <Link to={`/courses/${course.id}`} className="block">
         <div className="relative">
-          <img
-            src={course.image}
-            alt={course.title}
-            className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+          {imageError || !isValidImage(course.image) ? (
+            <div className="w-full h-48 bg-gray-200 flex items-center justify-center">
+              <BookOpen className="h-16 w-16 text-gray-400" />
+            </div>
+          ) : (
+            <img
+              src={course.image}
+              alt={course.title}
+              className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={handleImageError}
+            />
+          )}
           <div className="absolute top-3 left-3">
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getLevelColor(course.level)}`}>
               {getLevelText(course.level)}
@@ -163,28 +219,36 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, showActions = tr
             
             {showActions && isAuthenticated && user?.role === 'student' && (
               <div className="flex flex-col space-y-2">
-                <button
-                  onClick={handleBuyNow}
-                  disabled={isBuying}
-                  className="flex items-center justify-center space-x-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  <span>{isBuying ? 'Processando...' : 'Comprar'}</span>
-                </button>
-                
-                {canAddToCart && (
-                  <button
-                    onClick={handleAddToCart}
-                    disabled={isAdding}
-                    className="flex items-center justify-center space-x-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    <span>{isAdding ? 'Adicionando...' : 'Carrinho'}</span>
-                  </button>
-                )}
-                
-                {isInCart && (
-                  <span className="text-green-600 text-sm font-medium text-center">No carrinho</span>
+                {hasEnrollment ? (
+                  <span className="text-green-600 text-sm font-medium text-center bg-green-50 px-3 py-2 rounded-lg">
+                    ✅ Curso adquirido
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleBuyNow}
+                      disabled={isBuying}
+                      className="flex items-center justify-center space-x-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      <span>{isBuying ? 'Processando...' : 'Comprar'}</span>
+                    </button>
+                    
+                    {canAddToCart && (
+                      <button
+                        onClick={handleAddToCart}
+                        disabled={isAdding}
+                        className="flex items-center justify-center space-x-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        <ShoppingCart className="h-4 w-4" />
+                        <span>{isAdding ? 'Adicionando...' : 'Carrinho'}</span>
+                      </button>
+                    )}
+                    
+                    {isInCart && (
+                      <span className="text-green-600 text-sm font-medium text-center">No carrinho</span>
+                    )}
+                  </>
                 )}
               </div>
             )}

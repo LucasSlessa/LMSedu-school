@@ -293,8 +293,17 @@ async function handleCheckoutCompleted(session) {
       }
     }
 
+    // Se for uma compra do carrinho, limpar o carrinho
+    if (session.metadata && session.metadata.cart === 'true') {
+      console.log('🛒 Limpando carrinho após compra bem-sucedida');
+      await client.query(
+        'DELETE FROM cart_items WHERE user_id = $1 AND course_id = ANY($2)',
+        [order.user_id, itemsResult.rows.map(item => item.course_id)]
+      );
+    }
+
     await client.query('COMMIT');
-    console.log('Checkout processado com sucesso:', session.id);
+    console.log('✅ Checkout processado com sucesso:', session.id);
 
   } catch (error) {
     await client.query('ROLLBACK');

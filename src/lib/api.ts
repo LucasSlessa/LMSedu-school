@@ -298,6 +298,13 @@ export const stripeAPI = {
     });
   },
 
+  createCartCheckoutSession: async (courseIds: string[]) => {
+    return apiRequest('/stripe/create-cart-checkout-session', {
+      method: 'POST',
+      body: JSON.stringify({ courseIds }),
+    });
+  },
+
   getPaymentStatus: async (sessionId: string) => {
     return apiRequest(`/stripe/payment-status/${sessionId}`);
   },

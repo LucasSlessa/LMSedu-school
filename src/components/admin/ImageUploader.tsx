@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Image, X, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ImageUploaderProps {
@@ -22,7 +22,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const validateImage = (file: File): string | null => {
+  const validateImage = useCallback((file: File): string | null => {
     // Verificar se é uma imagem
     if (!file.type.startsWith('image/')) {
       return 'Por favor, selecione apenas arquivos de imagem';
@@ -40,9 +40,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     }
     
     return null;
-  };
+  }, [maxSize]);
   
-  const simulateUpload = (file: File): Promise<string> => {
+  const simulateUpload = useCallback((file: File): Promise<string> => {
     return new Promise((resolve) => {
       setIsUploading(true);
       setUploadProgress(0);
@@ -66,9 +66,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         });
       }, 200);
     });
-  };
+  }, []);
   
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     setError(null);
     
     const validationError = validateImage(file);
@@ -83,47 +83,60 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     } catch (err) {
       setError('Erro ao fazer upload da imagem. Tente novamente.');
     }
-  };
+  }, [validateImage, simulateUpload, onImageSelect]);
   
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(true);
-  };
+  }, []);
   
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
-  };
+  }, []);
   
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
     
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       handleFileSelect(files[0]);
     }
-  };
+  }, [handleFileSelect]);
   
-  const handleClick = () => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     fileInputRef.current?.click();
-  };
+  }, []);
   
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFileSelect(files[0]);
     }
-  };
+  }, [handleFileSelect]);
   
-  const removeImage = () => {
+  const removeImage = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     onImageSelect('');
     setUploadProgress(0);
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  };
+  }, [onImageSelect]);
+  
+  const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    onImageSelect(e.target.value);
+  }, [onImageSelect]);
   
   return (
     <div className="space-y-4">
@@ -160,16 +173,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                 src={currentImage}
                 alt="Preview"
                 className="w-full h-48 object-cover rounded-lg"
+                onError={() => setError('Erro ao carregar imagem')}
               />
               <div className="absolute inset-0 bg-black bg-opacity-40 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                 <div className="flex items-center space-x-3">
                   <button
+                    type="button"
                     onClick={handleClick}
                     className="px-4 py-2 bg-white text-gray-900 rounded-lg hover:bg-gray-100 transition-colors font-medium"
                   >
                     Alterar
                   </button>
                   <button
+                    type="button"
                     onClick={removeImage}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
@@ -234,7 +250,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           <input
             type="url"
             value={currentImage?.startsWith('blob:') ? '' : currentImage || ''}
-            onChange={(e) => onImageSelect(e.target.value)}
+            onChange={handleUrlChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="https://exemplo.com/imagem.jpg"
           />

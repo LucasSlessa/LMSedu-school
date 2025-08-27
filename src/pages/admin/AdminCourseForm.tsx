@@ -109,12 +109,17 @@ export const AdminCourseForm: React.FC = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('📝 Tentando submeter formulário...');
     
     if (!validateForm()) {
+      console.log('❌ Validação falhou, voltando para aba básica');
       setActiveTab('basic'); // Voltar para a aba básica se houver erros
       return;
     }
     
+    console.log('✅ Validação passou, salvando curso...');
     setLoading(true);
     
     try {
@@ -122,14 +127,27 @@ export const AdminCourseForm: React.FC = () => {
         ...formData,
       };
       
+      console.log('📊 Dados do curso para salvar:', courseData);
+      
       if (isEditing && existingCourse) {
+        console.log('🔄 Atualizando curso existente...');
         await updateCourse(existingCourse.id, courseData);
       } else {
+        console.log('🆕 Criando novo curso...');
         await addCourse(courseData);
       }
       
-      navigate('/admin/courses');
+      console.log('✅ Curso salvo com sucesso!');
+      
+      // Só navegar se não houver erros
+      if (Object.keys(errors).length === 0) {
+        console.log('🚀 Navegando para lista de cursos...');
+        navigate('/admin/courses');
+      } else {
+        console.log('⚠️ Não navegando devido a erros:', errors);
+      }
     } catch (error) {
+      console.error('❌ Erro ao salvar curso:', error);
       setErrors({ general: 'Erro ao salvar curso. Tente novamente.' });
     } finally {
       setLoading(false);

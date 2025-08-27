@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { cartAPI } from '../lib/api';
+import { stripeAPI } from '../lib/api';
 
 interface CartItem {
   id: string;
@@ -28,6 +29,7 @@ interface CartState {
   addToCart: (courseId: string) => Promise<boolean>;
   removeFromCart: (courseId: string) => Promise<boolean>;
   clearCart: () => Promise<boolean>;
+  checkoutCart: () => Promise<boolean>;
   getTotal: () => number;
   getItemCount: () => number;
 }
@@ -78,6 +80,25 @@ export const useCartStore = create<CartState>()(
           return true;
         } catch (error) {
           console.error('Erro ao limpar carrinho:', error);
+          return false;
+        }
+      },
+
+      checkoutCart: async () => {
+        try {
+          const items = get().items;
+          if (items.length === 0) {
+            throw new Error('Carrinho vazio');
+          }
+
+          const courseIds = items.map(item => item.course.id);
+          const response = await stripeAPI.createCartCheckoutSession(courseIds);
+          
+          // Redirecionar para o Stripe
+          window.location.href = response.url;
+          return true;
+        } catch (error) {
+          console.error('Erro ao fazer checkout do carrinho:', error);
           return false;
         }
       },

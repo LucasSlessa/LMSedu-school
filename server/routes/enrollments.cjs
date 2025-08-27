@@ -132,6 +132,26 @@ router.put('/:courseId/progress', authenticateToken, async (req, res) => {
   }
 });
 
+// Verificar se usuário possui um curso específico
+router.get('/check/:courseId', authenticateToken, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    const result = await executeQuery(
+      'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2',
+      [req.user.id, courseId]
+    );
+
+    res.json({
+      hasEnrollment: result.rows.length > 0,
+      enrollmentId: result.rows.length > 0 ? result.rows[0].id : null
+    });
+  } catch (error) {
+    console.error('Erro ao verificar matrícula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 module.exports = router;
  
 // ====== Ações administrativas ======
