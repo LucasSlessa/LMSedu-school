@@ -51,6 +51,18 @@ interface CourseState {
   updateCourse: (id: string, courseData: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   
+  // Métodos para módulos
+  getModules: (courseId: string) => Promise<any[]>;
+  createModule: (courseId: string, moduleData: any) => Promise<any>;
+  updateModule: (courseId: string, moduleId: string, moduleData: any) => Promise<any>;
+  deleteModule: (courseId: string, moduleId: string) => Promise<void>;
+
+  // Métodos para aulas
+  getLessons: (courseId: string, moduleId: string) => Promise<any[]>;
+  createLesson: (courseId: string, moduleId: string, lessonData: any) => Promise<any>;
+  updateLesson: (courseId: string, moduleId: string, lessonId: string, lessonData: any) => Promise<any>;
+  deleteLesson: (courseId: string, moduleId: string, lessonId: string) => Promise<void>;
+  
   // Enrollment methods
   fetchUserEnrollments: () => Promise<void>;
   getPurchasedCourses: () => Course[];
@@ -115,7 +127,82 @@ export const useCourseStore = create<CourseState>((set, get) => ({
       throw error;
     }
   },
+
+  // Métodos para módulos
+  getModules: async (courseId: string) => {
+    try {
+      return await coursesAPI.getModules(courseId);
+    } catch (error) {
+      console.error('Erro ao buscar módulos:', error);
+      throw error;
+    }
+  },
+
+  createModule: async (courseId: string, moduleData) => {
+    try {
+      return await coursesAPI.createModule(courseId, moduleData);
+    } catch (error) {
+      console.error('Erro ao criar módulo:', error);
+      throw error;
+    }
+  },
+
+  updateModule: async (courseId: string, moduleId: string, moduleData) => {
+    try {
+      return await coursesAPI.updateModule(courseId, moduleId, moduleData);
+    } catch (error) {
+      console.error('Erro ao atualizar módulo:', error);
+      throw error;
+    }
+  },
+
+  deleteModule: async (courseId: string, moduleId: string) => {
+    try {
+      await coursesAPI.deleteModule(courseId, moduleId);
+    } catch (error) {
+      console.error('Erro ao deletar módulo:', error);
+      throw error;
+    }
+  },
+
+  // Métodos para aulas
+  getLessons: async (courseId: string, moduleId: string) => {
+    try {
+      return await coursesAPI.getLessons(courseId, moduleId);
+    } catch (error) {
+      console.error('Erro ao buscar aulas:', error);
+      throw error;
+    }
+  },
+
+  createLesson: async (courseId: string, moduleId: string, lessonData) => {
+    try {
+      return await coursesAPI.createLesson(courseId, moduleId, lessonData);
+    } catch (error) {
+      console.error('Erro ao criar aula:', error);
+      throw error;
+    }
+  },
+
+  updateLesson: async (courseId: string, moduleId: string, lessonId: string, lessonData) => {
+    try {
+      return await coursesAPI.updateLesson(courseId, moduleId, lessonId, lessonData);
+    } catch (error) {
+      console.error('Erro ao atualizar aula:', error);
+      throw error;
+    }
+  },
+
+  deleteLesson: async (courseId: string, moduleId: string, lessonId: string) => {
+    try {
+      await coursesAPI.deleteLesson(courseId, moduleId, lessonId);
+    } catch (error) {
+      console.error('Erro ao deletar aula:', error);
+      throw error;
+    }
+  },
   
+  // Enrollment methods
   fetchUserEnrollments: async () => {
     try {
       const enrollments = await enrollmentsAPI.getAll();
@@ -126,16 +213,14 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   },
   
   getPurchasedCourses: () => {
-    return get().enrollments.map(enrollment => enrollment.course);
+    return get().enrollments
+      .filter(enrollment => enrollment.status === 'active' || enrollment.status === 'completed')
+      .map(enrollment => enrollment.course);
   },
   
   updateProgress: async (courseId: string, progressPercentage: number) => {
     try {
       await enrollmentsAPI.updateProgress(courseId, progressPercentage);
-      
-      // Recarregar matrículas do servidor para garantir consistência
-      const freshEnrollments = await enrollmentsAPI.getAll();
-      set({ enrollments: freshEnrollments });
       return true;
     } catch (error) {
       console.error('Erro ao atualizar progresso:', error);
@@ -144,6 +229,6 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   },
   
   getUserProgress: (courseId: string) => {
-    return get().enrollments.find(e => e.course.id === courseId);
+    return get().enrollments.find(enrollment => enrollment.course.id === courseId);
   },
 }));

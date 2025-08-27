@@ -170,6 +170,56 @@ export const coursesAPI = {
       method: 'DELETE',
     });
   },
+
+  // Módulos do curso
+  getModules: async (courseId: string) => {
+    return apiRequest(`/courses/${courseId}/modules`);
+  },
+
+  createModule: async (courseId: string, moduleData: unknown) => {
+    return apiRequest(`/courses/${courseId}/modules`, {
+      method: 'POST',
+      body: JSON.stringify(moduleData),
+    });
+  },
+
+  updateModule: async (courseId: string, moduleId: string, moduleData: unknown) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(moduleData),
+    });
+  },
+
+  deleteModule: async (courseId: string, moduleId: string) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Aulas do módulo
+  getLessons: async (courseId: string, moduleId: string) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}/lessons`);
+  },
+
+  createLesson: async (courseId: string, moduleId: string, lessonData: unknown) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}/lessons`, {
+      method: 'POST',
+      body: JSON.stringify(lessonData),
+    });
+  },
+
+  updateLesson: async (courseId: string, moduleId: string, lessonId: string, lessonData: unknown) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`, {
+      method: 'PUT',
+      body: JSON.stringify(lessonData),
+    });
+  },
+
+  deleteLesson: async (courseId: string, moduleId: string, lessonId: string) => {
+    return apiRequest(`/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // Categories API

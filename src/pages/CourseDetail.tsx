@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { Star, Clock, Users, Award, Play, FileText, HelpCircle, ShoppingCart, CheckCircle, CreditCard, Eye } from 'lucide-react';
 import { useCourseStore } from '../store/courseStore';
@@ -6,11 +6,24 @@ import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { paymentService } from '../services/paymentService';
 
+interface CourseModule {
+  id: string;
+  title: string;
+  description?: string;
+  sortOrder: number;
+  lessonsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const CourseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { getCourseById, getPurchasedCourses } = useCourseStore();
+  const { getCourseById, getPurchasedCourses, getModules } = useCourseStore();
   const { addToCart, items } = useCartStore();
   const { user, isAuthenticated } = useAuthStore();
+  
+  const [modules, setModules] = useState<CourseModule[]>([]);
+  const [loadingModules, setLoadingModules] = useState(true);
   
   if (!id) {
     return <Navigate to="/courses" replace />;
@@ -21,6 +34,24 @@ export const CourseDetail: React.FC = () => {
   if (!course) {
     return <Navigate to="/courses" replace />;
   }
+  
+  // Carregar módulos do curso
+  useEffect(() => {
+    const loadModules = async () => {
+      try {
+        setLoadingModules(true);
+        const courseModules = await getModules(course.id);
+        setModules(courseModules);
+      } catch (error) {
+        console.error('Erro ao carregar módulos:', error);
+        setModules([]);
+      } finally {
+        setLoadingModules(false);
+      }
+    };
+    
+    loadModules();
+  }, [course.id, getModules]);
   
   const isInCart = items.some(item => item.course.id === course.id);
   const purchasedCourses = user ? getPurchasedCourses(user.id) : [];
@@ -109,30 +140,9 @@ export const CourseDetail: React.FC = () => {
     }
   };
   
-  const courseContent = [
-    { type: 'video', title: 'Introdução ao Curso', duration: 15 },
-    { type: 'video', title: 'Conceitos Fundamentais', duration: 25 },
-    { type: 'pdf', title: 'Material de Apoio - Capítulo 1', duration: null },
-    { type: 'video', title: 'Projeto Prático 1', duration: 45 },
-    { type: 'quiz', title: 'Quiz - Teste seus Conhecimentos', duration: null },
-    { type: 'video', title: 'Conceitos Avançados', duration: 35 },
-    { type: 'pdf', title: 'Referências e Links Úteis', duration: null },
-    { type: 'video', title: 'Projeto Final', duration: 60 },
-    { type: 'quiz', title: 'Avaliação Final', duration: null },
-  ];
+
   
-  const getContentIcon = (type: string) => {
-    switch (type) {
-      case 'video':
-        return <Play className="h-4 w-4 text-blue-600" />;
-      case 'pdf':
-        return <FileText className="h-4 w-4 text-red-600" />;
-      case 'quiz':
-        return <HelpCircle className="h-4 w-4 text-green-600" />;
-      default:
-        return <FileText className="h-4 w-4 text-gray-600" />;
-    }
-  };
+
   
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -171,47 +181,31 @@ export const CourseDetail: React.FC = () => {
               
               <div className="flex items-center space-x-1">
                 <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span>{course.rating} ({Math.floor(course.studentsCount * 0.7)} avaliações)</span>
+                <span>{course.rating.toFixed(1)}</span>
               </div>
               
               <div className="flex items-center space-x-1">
                 <Award className="h-4 w-4" />
-                <span>Certificado incluído</span>
+                <span>Certificado disponível</span>
               </div>
             </div>
           </div>
           
           {/* Imagem do Curso */}
-          <div className="relative">
+          <div>
             <img
               src={course.image}
               alt={course.title}
               className="w-full h-64 md:h-80 object-cover rounded-xl"
             />
-            <div className="absolute inset-0 bg-black bg-opacity-40 rounded-xl flex items-center justify-center">
-              <button className="w-16 h-16 bg-white bg-opacity-90 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors group">
-                <Play className="h-6 w-6 text-gray-900 ml-1 group-hover:scale-110 transition-transform" />
-              </button>
-            </div>
           </div>
           
           {/* Sobre o Instrutor */}
           <div className="bg-gray-50 p-6 rounded-xl">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Sobre o Instrutor</h3>
-            <div className="flex items-start space-x-4">
-              <img
-                src="https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=150"
-                alt={course.instructor}
-                className="w-16 h-16 rounded-full object-cover"
-              />
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">{course.instructor}</h4>
-                <p className="text-sm text-gray-600 mb-2">Especialista em {course.category}</p>
-                <p className="text-sm text-gray-600">
-                  Profissional com mais de 10 anos de experiência na área, tendo trabalhado em grandes empresas 
-                  e ajudado milhares de alunos a desenvolverem suas habilidades.
-                </p>
-              </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-1">{course.instructor}</h4>
+              <p className="text-sm text-gray-600 mb-2">Especialista em {course.category}</p>
             </div>
           </div>
           
@@ -219,21 +213,38 @@ export const CourseDetail: React.FC = () => {
           <div>
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Conteúdo do Curso</h3>
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              {courseContent.map((content, index) => (
-                <div key={index} className="border-b border-gray-200 last:border-b-0">
-                  <div className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        {getContentIcon(content.type)}
-                        <span className="font-medium text-gray-900">{content.title}</span>
-                      </div>
-                      {content.duration && (
-                        <span className="text-sm text-gray-500">{content.duration} min</span>
-                      )}
-                    </div>
-                  </div>
+              {loadingModules ? (
+                <div className="p-6 text-center text-gray-500">
+                  Carregando conteúdo do curso...
                 </div>
-              ))}
+              ) : modules.length > 0 ? (
+                modules
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((module, index) => (
+                    <div key={module.id} className="border-b border-gray-200 last:border-b-0">
+                      <div className="p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <FileText className="h-4 w-4 text-blue-600" />
+                            <div>
+                              <span className="font-medium text-gray-900">{module.title}</span>
+                              {module.description && (
+                                <p className="text-sm text-gray-600 mt-1">{module.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm text-gray-500">{module.lessonsCount} aulas</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              ) : (
+                <div className="p-6 text-center text-gray-500">
+                  Nenhum módulo disponível para este curso.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -245,7 +256,7 @@ export const CourseDetail: React.FC = () => {
               <div className="text-3xl font-bold text-gray-900 mb-2">
                 {formatPrice(course.price)}
               </div>
-              <p className="text-sm text-gray-600">Acesso vitalício</p>
+              <p className="text-sm text-gray-600">Acesso completo</p>
             </div>
             
             {isPurchased ? (
@@ -337,40 +348,29 @@ export const CourseDetail: React.FC = () => {
               </div>
               
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Certificado:</span>
-                <span className="font-medium text-gray-900">Incluído</span>
+                <span className="text-gray-600">Categoria:</span>
+                <span className="font-medium text-gray-900">{course.category}</span>
               </div>
               
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Acesso:</span>
-                <span className="font-medium text-gray-900">Vitalício</span>
-              </div>
-              
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Suporte:</span>
-                <span className="font-medium text-gray-900">Incluído</span>
+                <span className="text-gray-600">Instrutor:</span>
+                <span className="font-medium text-gray-900">{course.instructor}</span>
               </div>
             </div>
 
-            {/* Garantia */}
+            {/* Informações do Curso */}
             <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                </svg>
-                <span>Pagamento 100% seguro</span>
-              </div>
               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                <span>Acesso imediato após pagamento</span>
+                <span>Conteúdo atualizado regularmente</span>
               </div>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>Garantia de 30 dias</span>
+                <span>Suporte ao aluno</span>
               </div>
             </div>
           </div>

@@ -33,7 +33,15 @@ interface UploadedFile {
 export const AdminCourseForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { courses, addCourse, updateCourse } = useCourseStore();
+  const { 
+    courses, 
+    addCourse, 
+    updateCourse, 
+    getModules, 
+    createModule: createModuleAPI, 
+    updateModule: updateModuleAPI, 
+    deleteModule: deleteModuleAPI 
+  } = useCourseStore();
   const { categories, addCategory, updateCategory, deleteCategory } = useCategoryStore();
   const isEditing = Boolean(id);
   const existingCourse = isEditing ? courses.find(c => c.id === id) : null;
@@ -129,15 +137,53 @@ export const AdminCourseForm: React.FC = () => {
       
       console.log('📊 Dados do curso para salvar:', courseData);
       
+      let savedCourse;
       if (isEditing && existingCourse) {
         console.log('🔄 Atualizando curso existente...');
         await updateCourse(existingCourse.id, courseData);
+        savedCourse = existingCourse;
       } else {
         console.log('🆕 Criando novo curso...');
-        await addCourse(courseData);
+        const newCourse = await addCourse(courseData);
+        savedCourse = newCourse;
       }
       
-      console.log('✅ Curso salvo com sucesso!');
+      // Salvar módulos
+      if (savedCourse && modules.length > 0) {
+        console.log('📚 Salvando módulos...');
+        
+        for (let i = 0; i < modules.length; i++) {
+          const module = modules[i];
+          
+          if (isEditing && module.id !== '1') {
+            // Atualizar módulo existente
+            try {
+              await updateModuleAPI(savedCourse.id, module.id, {
+                title: module.title,
+                description: module.content,
+                sortOrder: i
+              });
+              console.log(`✅ Módulo "${module.title}" atualizado com sucesso`);
+            } catch (error) {
+              console.error(`❌ Erro ao atualizar módulo "${module.title}":`, error);
+            }
+          } else {
+            // Criar novo módulo
+            try {
+              await createModuleAPI(savedCourse.id, {
+                title: module.title,
+                description: module.content,
+                sortOrder: i
+              });
+              console.log(`✅ Módulo "${module.title}" criado com sucesso`);
+            } catch (error) {
+              console.error(`❌ Erro ao criar módulo "${module.title}":`, error);
+            }
+          }
+        }
+      }
+      
+      console.log('✅ Curso e módulos salvos com sucesso!');
       
       // Só navegar se não houver erros
       if (Object.keys(errors).length === 0) {
