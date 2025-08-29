@@ -16,6 +16,10 @@ interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: number;
+  type?: 'multiple-choice';
+  explanation?: string;
+  required?: boolean;
+  points?: number;
 }
 
 interface CourseLesson {
@@ -210,8 +214,27 @@ export const AdminCourseForm: React.FC = () => {
         if (!lesson.title.trim()) {
           newErrors[`module-${index}-lesson-${lessonIndex}-title`] = `Título da aula ${lessonIndex + 1} do módulo ${index + 1} é obrigatório`;
         }
-        if (lesson.type === 'quiz' && (!lesson.quizQuestions || lesson.quizQuestions.length === 0)) {
-          newErrors[`module-${index}-lesson-${lessonIndex}-quiz`] = `Aula ${lessonIndex + 1} do módulo ${index + 1}: Adicione pelo menos uma pergunta ao questionário`;
+        // Validação mais flexível para quiz - permitir salvar mesmo com perguntas vazias para permitir edição posterior
+        if (lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+          // Só validar se houver perguntas criadas
+          const hasValidQuestions = lesson.quizQuestions.some(q => 
+            q.question && q.question.trim() && 
+            q.options && q.options.some(opt => opt && opt.trim())
+          );
+          
+          if (!hasValidQuestions) {
+            newErrors[`module-${index}-lesson-${lessonIndex}-quiz`] = `Aula ${lessonIndex + 1} do módulo ${index + 1}: Complete pelo menos uma pergunta do questionário`;
+          }
+        }
+        if (lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+          lesson.quizQuestions.forEach((question, qIndex) => {
+            if (!question.question || !question.question.trim()) {
+              newErrors[`module-${index}-lesson-${lessonIndex}-question-${qIndex}`] = `Pergunta ${qIndex + 1} da aula ${lessonIndex + 1} do módulo ${index + 1}: Texto da pergunta é obrigatório`;
+            }
+            if (!question.options || !Array.isArray(question.options) || !question.options.some(opt => opt && opt.trim())) {
+              newErrors[`module-${index}-lesson-${lessonIndex}-question-${qIndex}-options`] = `Pergunta ${qIndex + 1} da aula ${lessonIndex + 1} do módulo ${index + 1}: Adicione pelo menos uma opção válida`;
+            }
+          });
         }
       });
     });
@@ -297,6 +320,21 @@ export const AdminCourseForm: React.FC = () => {
               const lesson = module.lessons[j];
               
               try {
+                // Preparar quiz questions com estrutura correta
+                let processedQuizQuestions = null;
+                if (lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+                  processedQuizQuestions = lesson.quizQuestions.map(q => ({
+                    id: q.id,
+                    question: q.question,
+                    options: q.options,
+                    correctAnswer: q.correctAnswer,
+                    type: q.type || 'multiple-choice',
+                    explanation: q.explanation || '',
+                    required: q.required !== false,
+                    points: q.points || 1
+                  }));
+                }
+
                 const lessonData = {
                   title: lesson.title,
                   description: lesson.content,
@@ -305,14 +343,15 @@ export const AdminCourseForm: React.FC = () => {
                   durationMinutes: lesson.duration,
                   sortOrder: j,
                   isFree: j === 0 && i === 0,
-                  quizQuestions: lesson.type === 'quiz' ? lesson.quizQuestions || [] : null
+                  quizQuestions: processedQuizQuestions
                 };
 
                 console.log(`🔍 Dados da aula "${lesson.title}":`, {
                   type: lesson.type,
-                  hasQuizQuestions: !!lesson.quizQuestions,
-                  quizQuestionsCount: lesson.quizQuestions?.length || 0,
-                  quizQuestions: lesson.quizQuestions,
+                  hasQuizQuestions: !!processedQuizQuestions,
+                  quizQuestionsCount: processedQuizQuestions?.length || 0,
+                  rawQuizQuestions: lesson.quizQuestions,
+                  processedQuizQuestions,
                   lessonDataToSend: lessonData
                 });
 
@@ -474,8 +513,12 @@ export const AdminCourseForm: React.FC = () => {
     const newQuestion: QuizQuestion = {
       id: `temp-question-${Date.now()}`,
       question: '',
-      options: ['', '', '', ''],
-      correctAnswer: 0
+      options: ['Opção 1', 'Opção 2', 'Opção 3', 'Opção 4'],
+      correctAnswer: 0,
+      type: 'multiple-choice',
+      explanation: '',
+      required: true,
+      points: 1
     };
 
     const moduleIndex = modules.findIndex(m => m.id === moduleId);

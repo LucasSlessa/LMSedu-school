@@ -105,7 +105,7 @@ function App() {
           />
           <Route 
             path="/learn/:id" 
-            element={isAuthenticated && user?.role === 'student' ? <CourseViewer /> : <Navigate to="/login" replace />} 
+            element={isAuthenticated ? <CourseViewer /> : <Navigate to="/login" replace />} 
           />
           
           {/* Payment routes */}

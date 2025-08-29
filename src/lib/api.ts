@@ -203,7 +203,24 @@ export const coursesAPI = {
 
   // Aulas do módulo
   getLessons: async (courseId: string, moduleId: string) => {
-    return apiRequest(`/courses/${courseId}/modules/${moduleId}/lessons`);
+    console.log('🔍 API: Buscando aulas para módulo:', { courseId, moduleId });
+    const response = await fetch(`${API_BASE_URL}/courses/${courseId}/modules/${moduleId}/lessons`);
+    if (!response.ok) throw new Error('Erro ao buscar aulas');
+    const lessons = await response.json();
+    console.log('📚 API: Aulas recebidas:', lessons);
+    
+    // Log específico para aulas de quiz
+    const quizLessons = lessons.filter((lesson: any) => lesson.contentType === 'quiz');
+    if (quizLessons.length > 0) {
+      console.log('🎯 API: Aulas de quiz encontradas:', quizLessons.map((lesson: any) => ({
+        id: lesson.id,
+        title: lesson.title,
+        hasQuizQuestions: !!lesson.quizQuestions,
+        questionsCount: lesson.quizQuestions?.length || 0
+      })));
+    }
+    
+    return lessons;
   },
 
   createLesson: async (courseId: string, moduleId: string, lessonData: unknown) => {

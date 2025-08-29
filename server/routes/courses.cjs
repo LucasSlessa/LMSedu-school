@@ -542,6 +542,15 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
     
     console.log('🔍 Buscando aulas para módulo:', moduleId);
     
+    // Primeiro verificar se a coluna quiz_questions existe
+    try {
+      await executeQuery(`
+        ALTER TABLE course_lessons ADD COLUMN IF NOT EXISTS quiz_questions JSONB
+      `);
+    } catch (error) {
+      console.log('ℹ️ Coluna quiz_questions já existe ou erro ao adicionar:', error.message);
+    }
+
     const result = await executeQuery(`
       SELECT 
         cl.*
@@ -555,23 +564,71 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
     const lessons = result.rows.map((row, index) => {
       let quizQuestions = null;
       
-      // Parse quiz_questions com tratamento de erro
+      // Parse quiz_questions com tratamento de erro e logs detalhados
+      console.log(`🔍 Processando aula ${index + 1}: "${row.title}" (ID: ${row.id})`);
+      console.log(`   Content Type: ${row.content_type}`);
+      console.log(`   Quiz Questions existe: ${!!row.quiz_questions}`);
+      console.log(`   Quiz Questions tipo: ${typeof row.quiz_questions}`);
+      
       if (row.quiz_questions) {
+        console.log(`   Quiz Questions valor completo:`, row.quiz_questions);
+        
         try {
           if (typeof row.quiz_questions === 'string') {
             quizQuestions = JSON.parse(row.quiz_questions);
           } else {
             quizQuestions = row.quiz_questions; // Já é objeto
           }
-          console.log(`✅ Aula ${index + 1} (${row.title}): Quiz parsed com sucesso`);
+          
+          console.log(`   ✅ Quiz parsed: ${Array.isArray(quizQuestions) ? quizQuestions.length + ' perguntas' : 'não é array'}`);
+          console.log(`   📊 Conteúdo parsed:`, quizQuestions);
+          
+          if (Array.isArray(quizQuestions) && quizQuestions.length > 0) {
+            console.log(`   📋 Perguntas encontradas:`);
+            quizQuestions.forEach((q, qIndex) => {
+              console.log(`      ${qIndex + 1}. "${q.question || 'SEM PERGUNTA'}"`);
+            });
+          } else if (Array.isArray(quizQuestions) && quizQuestions.length === 0 && row.content_type === 'quiz') {
+            console.log(`   ⚠️ Quiz vazio detectado para aula de quiz. Criando pergunta padrão...`);
+            
+            const defaultQuestions = [
+              {
+                id: 'default-1',
+                question: 'Esta é uma pergunta de teste. Selecione a opção correta:',
+                options: ['Opção A', 'Opção B (Correta)', 'Opção C', 'Opção D'],
+                correctAnswer: 1,
+                type: 'multiple-choice',
+                explanation: 'Esta é uma pergunta de exemplo criada automaticamente.',
+                required: true,
+                points: 1
+              }
+            ];
+            
+            quizQuestions = defaultQuestions;
+            console.log(`   ✅ Perguntas padrão criadas temporariamente`);
+          }
+          
         } catch (parseError) {
           console.error(`❌ Erro ao fazer parse de quiz_questions na aula ${index + 1}:`, parseError.message);
-          console.error('📄 Dados problemáticos (primeiros 200 chars):', 
-            typeof row.quiz_questions === 'string' 
-              ? row.quiz_questions.substring(0, 200) 
-              : JSON.stringify(row.quiz_questions).substring(0, 200)
-          );
+          console.error('📄 Dados problemáticos:', row.quiz_questions);
           quizQuestions = null;
+        }
+      } else {
+        console.log(`   ⚠️ Quiz Questions é null/undefined para aula de quiz`);
+        if (row.content_type === 'quiz') {
+          console.log(`   🔧 Criando perguntas padrão para quiz sem dados...`);
+          quizQuestions = [
+            {
+              id: 'default-1',
+              question: 'Esta é uma pergunta de teste. Selecione a opção correta:',
+              options: ['Opção A', 'Opção B (Correta)', 'Opção C', 'Opção D'],
+              correctAnswer: 1,
+              type: 'multiple-choice',
+              explanation: 'Esta é uma pergunta de exemplo criada automaticamente.',
+              required: true,
+              points: 1
+            }
+          ];
         }
       }
       

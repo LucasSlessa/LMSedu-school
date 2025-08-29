@@ -77,7 +77,7 @@ export const CourseViewer: React.FC = () => {
   }
 
   const course = getCourseById(id);
-  const purchasedCourses = getPurchasedCourses();
+  const purchasedCourses = user ? getPurchasedCourses(user.id) : [];
   const hasPurchased = purchasedCourses.some(c => c.id === id);
   const userProgress = getUserProgress(id);
   const isAdmin = user?.role === 'admin';
@@ -110,13 +110,17 @@ export const CourseViewer: React.FC = () => {
       
       try {
         setLoadingModules(true);
+        console.log('🔍 CourseViewer - Carregando módulos para curso:', id);
         const modules = await coursesAPI.getModules(id);
+        console.log('📚 Módulos carregados:', modules);
         
         // Carregar aulas para cada módulo
         const modulesWithLessons = await Promise.all(
           modules.map(async (module: any, moduleIndex: number) => {
             try {
+              console.log(`📂 Carregando aulas do módulo: ${module.title} (${module.id})`);
               const lessons = await coursesAPI.getLessons(id, module.id);
+              console.log(`📖 Aulas carregadas para ${module.title}:`, lessons);
               
               const formattedLessons = lessons.map((lesson: any, lessonIndex: number) => {
                 const baseLesson: any = {
@@ -133,13 +137,35 @@ export const CourseViewer: React.FC = () => {
                 };
 
                 // Se for quiz, carregar as perguntas do banco
-                if (lesson.contentType === 'quiz' && lesson.quizData) {
-                  try {
-                    baseLesson.quizQuestions = JSON.parse(lesson.quizData);
-                  } catch (error) {
-                    console.error('Erro ao parsear dados do quiz:', error);
+                if (lesson.contentType === 'quiz') {
+                  console.log('🎯 Processando aula de quiz no frontend:', {
+                    lessonId: lesson.id,
+                    lessonTitle: lesson.title,
+                    hasQuizQuestions: !!lesson.quizQuestions,
+                    quizQuestionsType: typeof lesson.quizQuestions,
+                    quizQuestionsValue: lesson.quizQuestions,
+                    rawLesson: lesson
+                  });
+                  
+                  // Garantir que quizQuestions seja sempre preservado
+                  if (lesson.quizQuestions && Array.isArray(lesson.quizQuestions) && lesson.quizQuestions.length > 0) {
+                    baseLesson.quizQuestions = lesson.quizQuestions;
+                    console.log('✅ Quiz questions preservadas no frontend:', baseLesson.quizQuestions);
+                  } else if (lesson.quizQuestions && typeof lesson.quizQuestions === 'string') {
+                    try {
+                      baseLesson.quizQuestions = JSON.parse(lesson.quizQuestions);
+                      console.log('✅ Quiz questions parsed no frontend:', baseLesson.quizQuestions);
+                    } catch (error) {
+                      console.error('❌ Erro ao parsear dados do quiz:', error);
+                      baseLesson.quizQuestions = [];
+                    }
+                  } else {
+                    console.log('⚠️ lesson.quizQuestions é null/undefined/empty no frontend');
                     baseLesson.quizQuestions = [];
                   }
+                } else {
+                  // Para aulas que não são quiz, garantir que não tenham quizQuestions
+                  baseLesson.quizQuestions = [];
                 }
 
                 return baseLesson;
@@ -225,7 +251,15 @@ export const CourseViewer: React.FC = () => {
           
           // Definir primeira aula como ativa
           if (sortedModules[0].lessons.length > 0) {
-            setActiveLesson(sortedModules[0].lessons[0]);
+            const firstLesson = sortedModules[0].lessons[0];
+            console.log('🎯 Definindo primeira aula como ativa:', {
+              lessonId: firstLesson.id,
+              lessonTitle: firstLesson.title,
+              contentType: firstLesson.contentType,
+              hasQuizQuestions: !!firstLesson.quizQuestions,
+              quizQuestions: firstLesson.quizQuestions
+            });
+            setActiveLesson(firstLesson);
           }
         }
       } catch (error) {
@@ -383,6 +417,15 @@ export const CourseViewer: React.FC = () => {
     setQuizSubmitted(false);
     setQuizScore(null);
   };
+
+  // Reset quiz state when changing lessons
+  useEffect(() => {
+    if (activeLesson?.contentType === 'quiz') {
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+      setQuizScore(null);
+    }
+  }, [activeLesson?.id]);
 
   const handleDownloadCertificate = async () => {
     if (!isCompleted) {
@@ -578,20 +621,38 @@ export const CourseViewer: React.FC = () => {
       case 'quiz':
         const quizQuestions = activeLesson.quizQuestions || [];
         
-        console.log('🎯 Renderizando quiz:', {
+        console.log('🎯 Renderizando quiz - DEBUG COMPLETO:', {
           lessonTitle: activeLesson.title,
+          lessonId: activeLesson.id,
+          contentType: activeLesson.contentType,
           hasQuizQuestions: !!activeLesson.quizQuestions,
+          quizQuestionsType: typeof activeLesson.quizQuestions,
           questionsCount: quizQuestions.length,
-          questions: quizQuestions
+          questions: quizQuestions,
+          fullLesson: activeLesson,
+          activeLessonKeys: Object.keys(activeLesson),
+          quizQuestionsRaw: activeLesson.quizQuestions
         });
         
         if (quizQuestions.length === 0) {
+          console.log('❌ Quiz sem perguntas - Debug completo:', {
+            activeLesson,
+            quizQuestions,
+            hasQuizQuestions: !!activeLesson.quizQuestions,
+            quizQuestionsType: typeof activeLesson.quizQuestions,
+            quizQuestionsLength: activeLesson.quizQuestions?.length,
+            rawQuizQuestions: activeLesson.quizQuestions
+          });
+          
           return (
             <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
               <h3 className="font-semibold text-yellow-900 mb-2">Quiz não configurado</h3>
               <p className="text-yellow-800">
                 Este quiz ainda não possui perguntas configuradas. Entre em contato com o instrutor.
               </p>
+              <div className="mt-4 text-xs text-yellow-700">
+                Debug: Lesson ID {activeLesson.id} - Quiz Questions: {JSON.stringify(activeLesson.quizQuestions)}
+              </div>
             </div>
           );
         }
