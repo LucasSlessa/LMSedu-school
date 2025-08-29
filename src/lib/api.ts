@@ -34,6 +34,11 @@ const getToken = () => {
   return token;
 };
 
+// Função para deletar aula
+export const deleteLessonAPI = async (courseId: string, moduleId: string, lessonId: string) => {
+  return api.delete(`/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`);
+};
+
 // Função para fazer requisições autenticadas
 const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   const token = getToken();
@@ -43,12 +48,12 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
     headers: {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     },
   };
 
   console.log('🔐 Headers da requisição:', {
-    'Content-Type': config.headers?.['Content-Type'],
+    'Content-Type': (config.headers as Record<string, string>)?.['Content-Type'],
     'Authorization': token ? `Bearer ${token.substring(0, 20)}...` : 'Não definido'
   });
 

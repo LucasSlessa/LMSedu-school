@@ -73,9 +73,21 @@ export const AdminCourses: React.FC = () => {
       await deleteCourse(courseId);
       // Recarregar a lista de cursos
       await fetchCourses();
+      alert(`Curso "${courseTitle}" excluído com sucesso!`);
     } catch (error: any) {
       console.error('Erro ao excluir curso:', error);
-      const errorMessage = error.message || 'Erro ao excluir curso. Tente novamente.';
+      let errorMessage = 'Erro ao excluir curso. Tente novamente.';
+      
+      if (error.message) {
+        if (error.message.includes('modules') || error.message.includes('lessons')) {
+          errorMessage = `Não é possível excluir o curso "${courseTitle}" porque ele possui módulos e aulas cadastradas. Exclua primeiro todos os módulos e aulas antes de excluir o curso.`;
+        } else if (error.message.includes('enrolled') || error.message.includes('students')) {
+          errorMessage = `Não é possível excluir o curso "${courseTitle}" porque há alunos matriculados. Cursos com matrículas não podem ser excluídos.`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       alert(errorMessage);
     } finally {
       setDeletingCourseId(null);

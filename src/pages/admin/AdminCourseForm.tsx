@@ -3,21 +3,39 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, Video, FileText, HelpCircle, Settings } from 'lucide-react';
 import { useCourseStore } from '../../store/courseStore';
 import { useCategoryStore } from '../../store/categoryStore';
-import { Course } from '../../types';
+import { Course, CourseModule, CourseContent } from '../../types';
+import { api, deleteLessonAPI } from '../../lib/api';
 import { QuizBuilder } from '../../components/admin/QuizBuilder';
 import { FileUploader } from '../../components/admin/FileUploader';
 import { ImageUploader } from '../../components/admin/ImageUploader';
 import { CategoryManager } from '../../components/admin/CategoryManager';
+import { coursesAPI } from '../../lib/api';
+
+interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+}
+
+interface CourseLesson {
+  id: string;
+  title: string;
+  type: 'video' | 'pdf' | 'pptx' | 'quiz' | 'text' | 'file';
+  content: string;
+  contentUrl?: string;
+  duration: number;
+  order: number;
+  files: any[];
+  quizQuestions?: QuizQuestion[];
+}
 
 interface CourseModule {
   id: string;
   title: string;
-  type: 'video' | 'pdf' | 'quiz';
-  content: string;
-  duration?: number;
-  quizQuestions?: any[];
-  files?: any[];
+  description: string;
   order: number;
+  lessons: CourseLesson[];
 }
 
 interface UploadedFile {
@@ -40,7 +58,10 @@ export const AdminCourseForm: React.FC = () => {
     getModules, 
     createModule: createModuleAPI, 
     updateModule: updateModuleAPI, 
-    deleteModule: deleteModuleAPI 
+    deleteModule: deleteModuleAPI,
+    createLesson: createLessonAPI,
+    updateLesson: updateLessonAPI,
+    deleteLesson: deleteLessonAPI
   } = useCourseStore();
   const { categories, addCategory, updateCategory, deleteCategory } = useCategoryStore();
   const isEditing = Boolean(id);
@@ -61,12 +82,20 @@ export const AdminCourseForm: React.FC = () => {
   const [modules, setModules] = useState<CourseModule[]>([
     { 
       id: '1', 
-      title: 'Introdução', 
-      type: 'video', 
-      content: '', 
-      duration: 15, 
+      title: 'Módulo 1', 
+      description: 'Descrição do primeiro módulo',
       order: 0,
-      files: []
+      lessons: [
+        {
+          id: '1-1',
+          title: 'Aula 1',
+          type: 'video',
+          content: '',
+          duration: 15,
+          order: 0,
+          files: []
+        }
+      ]
     },
   ]);
   
@@ -75,6 +104,71 @@ export const AdminCourseForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [loadingModules, setLoadingModules] = useState(false);
+  
+  // Carregar módulos existentes quando estiver editando
+  useEffect(() => {
+    const loadExistingModules = async () => {
+      if (isEditing && existingCourse) {
+        setLoadingModules(true);
+        try {
+          const courseModules = await getModules(existingCourse.id);
+          if (courseModules && courseModules.length > 0) {
+            const formattedModules = await Promise.all(
+              courseModules.map(async (module: any, index: number) => {
+                // Carregar aulas do módulo
+                let lessons: CourseLesson[] = [];
+                try {
+                  const moduleLessons = await coursesAPI.getLessons(existingCourse.id, module.id);
+                  lessons = moduleLessons.map((lesson: any, lessonIndex: number) => {
+                    const baseLesson: any = {
+                      id: lesson.id,
+                      title: lesson.title,
+                      type: lesson.contentType || 'video',
+                      content: lesson.description || '',
+                      contentUrl: lesson.contentUrl || '',
+                      duration: lesson.durationMinutes || 15,
+                      order: lesson.sortOrder || lessonIndex,
+                      files: []
+                    };
+
+                    // Se for quiz, carregar as perguntas
+                    if (lesson.contentType === 'quiz' && lesson.quizData) {
+                      try {
+                        baseLesson.quizQuestions = JSON.parse(lesson.quizData);
+                      } catch (error) {
+                        console.error('Erro ao parsear dados do quiz:', error);
+                        baseLesson.quizQuestions = [];
+                      }
+                    }
+
+                    return baseLesson;
+                  });
+                } catch (error) {
+                  console.error(`Erro ao carregar aulas do módulo ${module.id}:`, error);
+                }
+
+                return {
+                  id: module.id,
+                  title: module.title,
+                  description: module.description || '',
+                  order: module.sortOrder || index,
+                  lessons: lessons
+                };
+              })
+            );
+            setModules(formattedModules);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar módulos:', error);
+        } finally {
+          setLoadingModules(false);
+        }
+      }
+    };
+
+    loadExistingModules();
+  }, [isEditing, existingCourse, getModules]);
   
   const levels = [
     { value: 'beginner', label: 'Iniciante' },
@@ -106,9 +200,16 @@ export const AdminCourseForm: React.FC = () => {
       if (!module.title.trim()) {
         newErrors[`module-${index}-title`] = `Título do módulo ${index + 1} é obrigatório`;
       }
-      if (module.type === 'quiz' && (!module.quizQuestions || module.quizQuestions.length === 0)) {
-        newErrors[`module-${index}-quiz`] = `Módulo ${index + 1}: Adicione pelo menos uma pergunta ao questionário`;
-      }
+      
+      // Validar aulas do módulo
+      module.lessons.forEach((lesson, lessonIndex) => {
+        if (!lesson.title.trim()) {
+          newErrors[`module-${index}-lesson-${lessonIndex}-title`] = `Título da aula ${lessonIndex + 1} do módulo ${index + 1} é obrigatório`;
+        }
+        if (lesson.type === 'quiz' && (!lesson.quizQuestions || lesson.quizQuestions.length === 0)) {
+          newErrors[`module-${index}-lesson-${lessonIndex}-quiz`] = `Aula ${lessonIndex + 1} do módulo ${index + 1}: Adicione pelo menos uma pergunta ao questionário`;
+        }
+      });
     });
     
     setErrors(newErrors);
@@ -148,19 +249,20 @@ export const AdminCourseForm: React.FC = () => {
         savedCourse = newCourse;
       }
       
-      // Salvar módulos
+      // Salvar módulos e aulas
       if (savedCourse && modules.length > 0) {
-        console.log('📚 Salvando módulos...');
+        console.log('📚 Salvando módulos e aulas...');
         
         for (let i = 0; i < modules.length; i++) {
           const module = modules[i];
+          let savedModuleId = module.id;
           
-          if (isEditing && module.id !== '1') {
+          if (isEditing && module.id && !module.id.startsWith('temp-')) {
             // Atualizar módulo existente
             try {
               await updateModuleAPI(savedCourse.id, module.id, {
                 title: module.title,
-                description: module.content,
+                description: module.description,
                 sortOrder: i
               });
               console.log(`✅ Módulo "${module.title}" atualizado com sucesso`);
@@ -170,14 +272,53 @@ export const AdminCourseForm: React.FC = () => {
           } else {
             // Criar novo módulo
             try {
-              await createModuleAPI(savedCourse.id, {
+              const newModule = await createModuleAPI(savedCourse.id, {
                 title: module.title,
-                description: module.content,
+                description: module.description,
                 sortOrder: i
               });
+              savedModuleId = newModule.id;
               console.log(`✅ Módulo "${module.title}" criado com sucesso`);
             } catch (error) {
               console.error(`❌ Erro ao criar módulo "${module.title}":`, error);
+              continue; // Pular para o próximo módulo se houver erro
+            }
+          }
+          
+          // Salvar aulas do módulo
+          if (module.lessons && module.lessons.length > 0) {
+            console.log(`📖 Salvando ${module.lessons.length} aulas do módulo "${module.title}"`);
+            
+            for (let j = 0; j < module.lessons.length; j++) {
+              const lesson = module.lessons[j];
+              
+              try {
+                const lessonData = {
+                  title: lesson.title,
+                  description: lesson.content,
+                  contentType: lesson.type,
+                  contentUrl: lesson.contentUrl || lesson.content,
+                  durationMinutes: lesson.duration,
+                  sortOrder: j,
+                  isFree: j === 0 && i === 0,
+                  // Adicionar dados específicos do quiz se for do tipo quiz
+                  ...(lesson.type === 'quiz' && lesson.quizQuestions && {
+                    quizData: JSON.stringify(lesson.quizQuestions)
+                  })
+                };
+
+                if (isEditing && lesson.id && !lesson.id.startsWith('temp-')) {
+                  // Atualizar aula existente
+                  await updateLessonAPI(savedCourse.id, savedModuleId, lesson.id, lessonData);
+                  console.log(`✅ Aula "${lesson.title}" atualizada com sucesso`);
+                } else {
+                  // Criar nova aula
+                  await createLessonAPI(savedCourse.id, savedModuleId, lessonData);
+                  console.log(`✅ Aula "${lesson.title}" criada com sucesso`);
+                }
+              } catch (error) {
+                console.error(`❌ Erro ao salvar aula "${lesson.title}":`, error);
+              }
             }
           }
         }
@@ -202,19 +343,40 @@ export const AdminCourseForm: React.FC = () => {
   
   const addModule = () => {
     const newModule: CourseModule = {
-      id: Date.now().toString(),
-      title: '',
-      type: 'video',
-      content: '',
-      duration: 0,
+      id: `temp-${Date.now()}`,
+      title: `Módulo ${modules.length + 1}`,
+      description: `Descrição do módulo ${modules.length + 1}`,
       order: modules.length,
-      files: [],
+      lessons: [
+        {
+          id: `temp-${Date.now()}-1`,
+          title: 'Aula 1',
+          type: 'video',
+          content: '',
+          duration: 15,
+          order: 0,
+          files: []
+        }
+      ]
     };
     setModules([...modules, newModule]);
   };
   
-  const removeModule = (moduleId: string) => {
+  const removeModule = async (moduleId: string) => {
+    // Se for um módulo existente (não temporário), deletar do backend
+    if (isEditing && existingCourse && !moduleId.startsWith('temp-')) {
+      try {
+        await deleteModuleAPI(existingCourse.id, moduleId);
+        console.log(`✅ Módulo ${moduleId} deletado do backend`);
+      } catch (error) {
+        console.error(`❌ Erro ao deletar módulo ${moduleId}:`, error);
+        // Continuar mesmo com erro para permitir remoção da UI
+      }
+    }
+    
+    // Remover da UI
     setModules(modules.filter(m => m.id !== moduleId));
+    
     // Remover arquivos associados
     const newUploadedFiles = { ...uploadedFiles };
     delete newUploadedFiles[moduleId];
@@ -225,6 +387,147 @@ export const AdminCourseForm: React.FC = () => {
     setModules(modules.map(m => 
       m.id === moduleId ? { ...m, [field]: value } : m
     ));
+  };
+
+  const addLesson = (moduleId: string) => {
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const newLesson: CourseLesson = {
+      id: `temp-${Date.now()}-${Math.random()}`,
+      title: 'Nova Aula',
+      type: 'video',
+      content: '',
+      duration: 15,
+      order: 0,
+      files: []
+    };
+
+    const updatedModules = [...modules];
+    updatedModules[moduleIndex] = {
+      ...modules[moduleIndex],
+      lessons: [...modules[moduleIndex].lessons, newLesson]
+    };
+    setModules(updatedModules);
+  };
+
+  const removeLesson = async (moduleId: string, lessonId: string) => {
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const lesson = modules[moduleIndex].lessons.find(l => l.id === lessonId);
+    if (!lesson) return;
+
+    // Confirmar exclusão
+    if (!confirm(`Tem certeza que deseja excluir a aula "${lesson.title}"? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      // Se for aula existente (não temporária), deletar do backend
+      if (isEditing && existingCourse && !lessonId.startsWith('temp-')) {
+        await deleteLessonAPI(existingCourse.id, moduleId, lessonId);
+        console.log(`✅ Aula "${lesson.title}" deletada do backend`);
+      }
+
+      // Remover da UI
+      const module = modules[moduleIndex];
+      const updatedModules = [...modules];
+      updatedModules[moduleIndex] = {
+        ...module,
+        lessons: module.lessons.filter(l => l.id !== lessonId)
+      };
+      setModules(updatedModules);
+      
+      console.log(`🗑️ Aula "${lesson.title}" removida da interface`);
+    } catch (error) {
+      console.error('Erro ao excluir aula:', error);
+      alert('Erro ao excluir aula. Tente novamente.');
+    }
+  };
+
+  const updateLesson = (moduleId: string, lessonId: string, field: string, value: any) => {
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const module = modules[moduleIndex];
+    const updatedModules = [...modules];
+    updatedModules[moduleIndex] = {
+      ...module,
+      lessons: module.lessons.map(l => 
+        l.id === lessonId ? { ...l, [field]: value } : l
+      )
+    };
+    setModules(updatedModules);
+  };
+
+  const addQuizQuestion = (moduleId: string, lessonId: string) => {
+    const newQuestion: QuizQuestion = {
+      id: `temp-question-${Date.now()}`,
+      question: '',
+      options: ['', '', '', ''],
+      correctAnswer: 0
+    };
+
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const module = modules[moduleIndex];
+    const updatedModules = [...modules];
+    updatedModules[moduleIndex] = {
+      ...module,
+      lessons: module.lessons.map(l => 
+        l.id === lessonId 
+          ? { 
+              ...l, 
+              quizQuestions: [...(l.quizQuestions || []), newQuestion] 
+            } 
+          : l
+      )
+    };
+    setModules(updatedModules);
+  };
+
+  const updateQuizQuestion = (moduleId: string, lessonId: string, questionId: string, field: string, value: any) => {
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const module = modules[moduleIndex];
+    const updatedModules = [...modules];
+    updatedModules[moduleIndex] = {
+      ...module,
+      lessons: module.lessons.map(l => 
+        l.id === lessonId 
+          ? {
+              ...l,
+              quizQuestions: l.quizQuestions?.map(q => 
+                q.id === questionId ? { ...q, [field]: value } : q
+              )
+            }
+          : l
+      )
+    };
+    setModules(updatedModules);
+  };
+
+  const removeQuizQuestion = (moduleId: string, lessonId: string, questionId: string) => {
+    const moduleIndex = modules.findIndex(m => m.id === moduleId);
+    if (moduleIndex === -1) return;
+
+    const module = modules[moduleIndex];
+    const updatedModules = [...modules];
+    updatedModules[moduleIndex] = {
+      ...module,
+      lessons: module.lessons.map(l => 
+        l.id === lessonId 
+          ? {
+              ...l,
+              quizQuestions: l.quizQuestions?.filter(q => q.id !== questionId)
+            }
+          : l
+      )
+    };
+    setModules(updatedModules);
   };
   
   const handleFileSelect = (moduleId: string, files: File[]) => {
@@ -513,21 +816,25 @@ export const AdminCourseForm: React.FC = () => {
                 type="button"
                 onClick={addModule}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={loadingModules}
               >
                 <Plus className="h-4 w-4" />
                 <span>Adicionar Módulo</span>
               </button>
             </div>
             
-            <div className="space-y-6">
-              {modules.map((module, index) => {
-                const ModuleIcon = moduleTypes.find(t => t.value === module.type)?.icon || Video;
-                
-                return (
+            {loadingModules ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent mx-auto mb-4" />
+                <p className="text-gray-600">Carregando módulos existentes...</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {modules.map((module, index) => (
                   <div key={module.id} className="border border-gray-200 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-3">
-                        <ModuleIcon className="h-5 w-5 text-blue-600" />
+                        <Video className="h-5 w-5 text-blue-600" />
                         <h3 className="font-medium text-gray-900">Módulo {index + 1}</h3>
                       </div>
                       {modules.length > 1 && (
@@ -541,10 +848,10 @@ export const AdminCourseForm: React.FC = () => {
                       )}
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Título *
+                          Título do Módulo *
                         </label>
                         <input
                           type="text"
@@ -562,82 +869,203 @@ export const AdminCourseForm: React.FC = () => {
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tipo
+                          Descrição do Módulo
                         </label>
-                        <select
-                          value={module.type}
-                          onChange={(e) => updateModule(module.id, 'type', e.target.value)}
+                        <input
+                          type="text"
+                          value={module.description}
+                          onChange={(e) => updateModule(module.id, 'description', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          {moduleTypes.map(type => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
-                          ))}
-                        </select>
+                          placeholder="Descrição do módulo"
+                        />
                       </div>
-                      
-                      {module.type === 'video' && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Duração (min)
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={module.duration || 0}
-                            onChange={(e) => updateModule(module.id, 'duration', parseInt(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="15"
-                          />
-                        </div>
-                      )}
                     </div>
-                    
-                    {/* Conteúdo específico por tipo */}
-                    {module.type === 'quiz' ? (
-                      <div>
-                        <QuizBuilder
-                          questions={module.quizQuestions || []}
-                          onChange={(questions) => updateModule(module.id, 'quizQuestions', questions)}
-                        />
-                        {errors[`module-${index}-quiz`] && (
-                          <p className="mt-2 text-sm text-red-600">{errors[`module-${index}-quiz`]}</p>
-                        )}
+
+                    {/* Aulas do Módulo */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium text-gray-900">Aulas do Módulo</h4>
+                        <button
+                          type="button"
+                          onClick={() => addLesson(module.id)}
+                          className="flex items-center space-x-2 px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>Adicionar Aula</span>
+                        </button>
                       </div>
-                    ) : (
+
                       <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {module.type === 'video' ? 'URL do Vídeo ou Upload' : 'URL do PDF ou Upload'}
-                          </label>
-                          <input
-                            type="text"
-                            value={module.content}
-                            onChange={(e) => updateModule(module.id, 'content', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder={
-                              module.type === 'video' 
-                                ? 'https://youtube.com/watch?v=... ou faça upload abaixo' 
-                                : 'https://exemplo.com/arquivo.pdf ou faça upload abaixo'
-                            }
-                          />
-                        </div>
-                        
-                        <FileUploader
-                          accept={moduleTypes.find(t => t.value === module.type)?.accept || '*/*'}
-                          multiple={false}
-                          maxSize={module.type === 'video' ? 500 : 50}
-                          onFileSelect={(files) => handleFileSelect(module.id, files)}
-                          uploadedFiles={uploadedFiles[module.id] || []}
-                          onFileRemove={(fileId) => handleFileRemove(module.id, fileId)}
-                          label={`Upload de ${module.type === 'video' ? 'Vídeo' : 'PDF/PPT'}`}
-                          description={`Arraste e solte ${module.type === 'video' ? 'vídeos' : 'arquivos PDF ou PowerPoint'} aqui ou clique para selecionar`}
-                        />
+                        {module.lessons.map((lesson, lessonIndex) => {
+                          const LessonIcon = lesson.type === 'video' ? Video : lesson.type === 'pdf' ? FileText : HelpCircle;
+                          
+                          return (
+                            <div key={lesson.id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-2">
+                                  <LessonIcon className="h-4 w-4 text-gray-600" />
+                                  <span className="text-sm font-medium text-gray-700">Aula {lessonIndex + 1}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeLesson(module.id, lesson.id)}
+                                  className="text-red-500 hover:text-red-700 p-1"
+                                  title="Excluir aula"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Título da Aula *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={lesson.title}
+                                    onChange={(e) => updateLesson(module.id, lesson.id, 'title', e.target.value)}
+                                    className={`w-full px-2 py-1 border rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-transparent ${
+                                      errors[`module-${index}-lesson-${lessonIndex}-title`] ? 'border-red-300' : 'border-gray-300'
+                                    }`}
+                                    placeholder="Nome da aula"
+                                  />
+                                  {errors[`module-${index}-lesson-${lessonIndex}-title`] && (
+                                    <p className="mt-1 text-xs text-red-600">{errors[`module-${index}-lesson-${lessonIndex}-title`]}</p>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Tipo de Conteúdo
+                                  </label>
+                                  <select
+                                    value={lesson.type}
+                                    onChange={(e) => updateLesson(module.id, lesson.id, 'type', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                  >
+                                    <option value="video">Vídeo</option>
+                                    <option value="pdf">PDF/PPT</option>
+                                    <option value="quiz">Quiz</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Duração (min)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={lesson.duration || 15}
+                                    onChange={(e) => updateLesson(module.id, lesson.id, 'duration', parseInt(e.target.value) || 15)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="15"
+                                  />
+                                </div>
+                              </div>
+
+                              {lesson.type !== 'quiz' && (
+                                <div className="mt-3">
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    {lesson.type === 'video' ? 'URL do Vídeo' : 'URL do Arquivo (Google Drive)'}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={lesson.contentUrl || lesson.content}
+                                    onChange={(e) => {
+                                      updateLesson(module.id, lesson.id, 'contentUrl', e.target.value);
+                                      updateLesson(module.id, lesson.id, 'content', e.target.value);
+                                    }}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder={lesson.type === 'video' ? 'https://www.youtube.com/watch?v=...' : 'https://drive.google.com/file/d/.../view'}
+                                  />
+                                </div>
+                              )}
+
+                              {lesson.type === 'quiz' && (
+                                <div className="mt-3 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-medium text-gray-600">
+                                      Perguntas do Quiz
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => addQuizQuestion(module.id, lesson.id)}
+                                      className="flex items-center space-x-1 px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      <span>Adicionar Pergunta</span>
+                                    </button>
+                                  </div>
+
+                                  {lesson.quizQuestions?.map((question, qIndex) => (
+                                    <div key={question.id} className="border border-gray-200 rounded p-3 bg-white">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-medium text-gray-700">Pergunta {qIndex + 1}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => removeQuizQuestion(module.id, lesson.id, question.id)}
+                                          className="text-red-500 hover:text-red-700"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+
+                                      <div className="space-y-2">
+                                        <input
+                                          type="text"
+                                          value={question.question}
+                                          onChange={(e) => updateQuizQuestion(module.id, lesson.id, question.id, 'question', e.target.value)}
+                                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                          placeholder="Digite a pergunta..."
+                                        />
+
+                                        <div className="grid grid-cols-1 gap-2">
+                                          {question.options.map((option, optIndex) => (
+                                            <div key={optIndex} className="flex items-center space-x-2">
+                                              <input
+                                                type="radio"
+                                                name={`correct-${question.id}`}
+                                                checked={question.correctAnswer === optIndex}
+                                                onChange={() => updateQuizQuestion(module.id, lesson.id, question.id, 'correctAnswer', optIndex)}
+                                                className="text-green-600"
+                                              />
+                                              <input
+                                                type="text"
+                                                value={option}
+                                                onChange={(e) => {
+                                                  const newOptions = [...question.options];
+                                                  newOptions[optIndex] = e.target.value;
+                                                  updateQuizQuestion(module.id, lesson.id, question.id, 'options', newOptions);
+                                                }}
+                                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                                                placeholder={`Opção ${optIndex + 1}`}
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <p className="text-xs text-gray-500">Selecione o botão de rádio da resposta correta</p>
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  {(!lesson.quizQuestions || lesson.quizQuestions.length === 0) && (
+                                    <div className="text-center py-4 text-gray-500 text-sm">
+                                      Nenhuma pergunta adicionada. Clique em "Adicionar Pergunta" para começar.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         
@@ -659,130 +1087,43 @@ export const AdminCourseForm: React.FC = () => {
         {/* Tab: Visualização */}
         {activeTab === 'preview' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Visualização do Curso</h2>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Preview do Card */}
-              <div className="lg:col-span-2">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Como aparecerá no catálogo:</h3>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-sm">
-                  {formData.image && (
-                    <img
-                      src={formData.image}
-                      alt={formData.title}
-                      className="w-full h-48 object-cover"
-                    />
-                  )}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-blue-600 font-medium uppercase">
-                        {formData.category}
-                      </span>
-                      <span className="text-sm font-bold text-gray-900">
-                        R$ {formData.price.toFixed(2)}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 mb-2">
-                      {formData.title || 'Título do curso'}
-                    </h4>
-                    <p className="text-gray-600 text-sm mb-3">
-                      {formData.shortDescription || 'Descrição curta do curso'}
-                    </p>
-                    <div className="flex items-center justify-between text-sm text-gray-500">
-                      <span>{formData.duration}h</span>
-                      <span>Por {formData.instructor || 'Instrutor'}</span>
-                    </div>
-                  </div>
-                </div>
+            <div className="text-center py-12">
+              <div className="mx-auto h-24 w-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <Video className="h-12 w-12 text-gray-400" />
               </div>
-              
-              {/* Resumo do Conteúdo */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Resumo do Conteúdo:</h3>
-                <div className="space-y-3">
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-700">Total de Módulos</p>
-                    <p className="text-2xl font-bold text-blue-600">{modules.length}</p>
-                  </div>
-                  
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-700">Duração Total</p>
-                    <p className="text-2xl font-bold text-green-600">{formData.duration}h</p>
-                  </div>
-                  
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium text-gray-700">Tipos de Conteúdo</p>
-                    <div className="mt-2 space-y-1">
-                      {moduleTypes.map(type => {
-                        const count = modules.filter(m => m.type === type.value).length;
-                        return count > 0 ? (
-                          <div key={type.value} className="flex items-center justify-between text-sm">
-                            <span>{type.label}</span>
-                            <span className="font-medium">{count}</span>
-                          </div>
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Visualização do Curso
+              </h3>
+              <p className="text-gray-600">
+                A visualização será implementada em breve
+              </p>
             </div>
           </div>
         )}
-        
+
         {/* Botões de Ação */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            {activeTab !== 'basic' && (
-              <button
-                type="button"
-                onClick={() => {
-                  const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-                  if (currentIndex > 0) {
-                    setActiveTab(tabs[currentIndex - 1].id);
-                  }
-                }}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Anterior
-              </button>
-            )}
-            
-            {activeTab !== 'preview' && (
-              <button
-                type="button"
-                onClick={() => {
-                  const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-                  if (currentIndex < tabs.length - 1) {
-                    setActiveTab(tabs[currentIndex + 1].id);
-                  }
-                }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Próximo
-              </button>
-            )}
-          </div>
+        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/courses')}
+            className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Voltar</span>
+          </button>
           
-          <div className="flex items-center space-x-4">
-            <button
-              type="button"
-              onClick={() => navigate('/admin/courses')}
-              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              <span>{loading ? 'Salvando...' : isEditing ? 'Atualizar Curso' : 'Criar Curso'}</span>
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            <span>{loading ? 'Salvando...' : isEditing ? 'Atualizar Curso' : 'Criar Curso'}</span>
+          </button>
         </div>
       </form>
     </div>
   );
 };
+
+export default AdminCourseForm;

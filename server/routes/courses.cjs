@@ -333,6 +333,18 @@ router.delete('/:id', authenticateToken, requireRole(['admin', 'instructor']), a
       });
     }
 
+    // Verificar se há módulos ou aulas associadas ao curso
+    const modulesCheck = await executeQuery(
+      'SELECT COUNT(*) as count FROM course_modules WHERE course_id = $1',
+      [id]
+    );
+
+    if (modulesCheck.rows[0].count > 0) {
+      return res.status(400).json({ 
+        error: 'Não é possível deletar este curso pois ele possui módulos cadastrados. Exclua primeiro todos os módulos e suas aulas antes de excluir o curso.' 
+      });
+    }
+
     // Deletar o curso
     await executeQuery('DELETE FROM courses WHERE id = $1', [id]);
 
@@ -534,6 +546,7 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
       description: row.description,
       contentType: row.content_type,
       contentUrl: row.content_url,
+      quizQuestions: row.quiz_questions ? JSON.parse(row.quiz_questions) : null,
       durationMinutes: row.duration_minutes,
       sortOrder: row.sort_order,
       isFree: row.is_free,
@@ -552,7 +565,9 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
 router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
   try {
     const { courseId, moduleId } = req.params;
-    const { title, description, contentType, contentUrl, durationMinutes, sortOrder = 0, isFree = false } = req.body;
+    const { title, description, contentType, contentUrl, durationMinutes, sortOrder = 0, isFree = false, quizQuestions } = req.body;
+    
+    console.log(' Dados recebidos para criar aula:', { title, contentType, contentUrl, quizQuestions });
     
     // Verificar se o usuário pode editar este curso
     const courseCheck = await executeQuery(
@@ -568,11 +583,14 @@ router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRo
       return res.status(403).json({ error: 'Sem permissão para editar este curso' });
     }
 
+    // Preparar quiz_questions como JSON se existir
+    const quizQuestionsJson = quizQuestions ? JSON.stringify(quizQuestions) : null;
+
     const result = await executeQuery(`
-      INSERT INTO course_lessons (module_id, title, description, content_type, content_url, duration_minutes, sort_order, is_free)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO course_lessons (module_id, title, description, content_type, content_url, quiz_questions, duration_minutes, sort_order, is_free)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
-    `, [moduleId, title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree]);
+    `, [moduleId, title, description, contentType, contentUrl, quizQuestionsJson, durationMinutes, sortOrder, isFree]);
 
     const newLesson = {
       id: result.rows[0].id,
@@ -580,6 +598,7 @@ router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRo
       description: result.rows[0].description,
       contentType: result.rows[0].content_type,
       contentUrl: result.rows[0].content_url,
+      quizQuestions: result.rows[0].quiz_questions ? JSON.parse(result.rows[0].quiz_questions) : null,
       durationMinutes: result.rows[0].duration_minutes,
       sortOrder: result.rows[0].sort_order,
       isFree: result.rows[0].is_free,
@@ -598,7 +617,9 @@ router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRo
 router.put('/:courseId/modules/:moduleId/lessons/:lessonId', authenticateToken, requireRole(['admin', 'instructor']), async (req, res) => {
   try {
     const { courseId, moduleId, lessonId } = req.params;
-    const { title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree } = req.body;
+    const { title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree, quizQuestions } = req.body;
+    
+    console.log('🔄 Dados recebidos para atualizar aula:', { title, contentType, contentUrl, quizQuestions });
     
     // Verificar se o usuário pode editar este curso
     const courseCheck = await executeQuery(
@@ -614,13 +635,16 @@ router.put('/:courseId/modules/:moduleId/lessons/:lessonId', authenticateToken, 
       return res.status(403).json({ error: 'Sem permissão para editar este curso' });
     }
 
+    // Preparar quiz_questions como JSON se existir
+    const quizQuestionsJson = quizQuestions ? JSON.stringify(quizQuestions) : null;
+
     const result = await executeQuery(`
       UPDATE course_lessons 
       SET title = $1, description = $2, content_type = $3, content_url = $4, 
-          duration_minutes = $5, sort_order = $6, is_free = $7, updated_at = NOW()
-      WHERE id = $8 AND module_id = $9
+          quiz_questions = $5, duration_minutes = $6, sort_order = $7, is_free = $8, updated_at = NOW()
+      WHERE id = $9 AND module_id = $10
       RETURNING *
-    `, [title, description, contentType, contentUrl, durationMinutes, sortOrder, isFree, lessonId, moduleId]);
+    `, [title, description, contentType, contentUrl, quizQuestionsJson, durationMinutes, sortOrder, isFree, lessonId, moduleId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Aula não encontrada' });
@@ -632,6 +656,7 @@ router.put('/:courseId/modules/:moduleId/lessons/:lessonId', authenticateToken, 
       description: result.rows[0].description,
       contentType: result.rows[0].content_type,
       contentUrl: result.rows[0].content_url,
+      quizQuestions: result.rows[0].quiz_questions ? JSON.parse(result.rows[0].quiz_questions) : null,
       durationMinutes: result.rows[0].duration_minutes,
       sortOrder: result.rows[0].sort_order,
       isFree: result.rows[0].is_free,

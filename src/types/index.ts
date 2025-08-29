@@ -27,11 +27,13 @@ export interface Course {
 export interface CourseContent {
   id: string;
   courseId: string;
-  type: 'video' | 'pdf' | 'quiz';
+  type: 'video' | 'pdf' | 'pptx' | 'quiz' | 'text' | 'file';
   title: string;
   content: string; // URL ou conteúdo
+  contentUrl?: string;
   order: number;
   duration?: number; // para vídeos
+  quizQuestions?: QuizQuestion[];
 }
 
 export interface Quiz {

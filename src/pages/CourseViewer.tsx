@@ -17,15 +17,30 @@ import {
 import { useCourseStore } from '../store/courseStore';
 import { useAuthStore } from '../store/authStore';
 import { generateCertificatePDF } from '../utils/certificateGenerator';
+import { coursesAPI } from '../lib/api';
 
 interface CourseModule {
   id: string;
   title: string;
-  type: 'video' | 'pdf' | 'quiz';
-  content: string;
-  duration?: number;
+  description?: string;
+  sortOrder: number;
+  lessonsCount: number;
+  lessons?: CourseLesson[];
   completed: boolean;
   locked: boolean;
+}
+
+interface CourseLesson {
+  id: string;
+  title: string;
+  description?: string;
+  contentType: 'video' | 'pdf' | 'pptx' | 'text' | 'quiz' | 'file';
+  contentUrl?: string;
+  durationMinutes: number;
+  sortOrder: number;
+  isFree: boolean;
+  completed: boolean;
+  quizQuestions?: any[];
 }
 
 export const CourseViewer: React.FC = () => {
@@ -33,10 +48,29 @@ export const CourseViewer: React.FC = () => {
   const { user } = useAuthStore();
   const { getCourseById, getPurchasedCourses, getUserProgress, updateProgress } = useCourseStore();
   const [activeModule, setActiveModule] = useState<CourseModule | null>(null);
+  const [activeLesson, setActiveLesson] = useState<CourseLesson | null>(null);
+  const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
+  const [loadingModules, setLoadingModules] = useState(true);
   const [quizAnswers, setQuizAnswers] = useState<{ [key: string]: string }>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [isGeneratingCertificate, setIsGeneratingCertificate] = useState(false);
+  
+  // Sistema de persistência local para aulas concluídas
+  const getCompletedLessons = (courseId: string): string[] => {
+    const key = `completed_lessons_${courseId}_${user?.id}`;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  };
+  
+  const saveCompletedLesson = (courseId: string, lessonId: string) => {
+    const key = `completed_lessons_${courseId}_${user?.id}`;
+    const completed = getCompletedLessons(courseId);
+    if (!completed.includes(lessonId)) {
+      completed.push(lessonId);
+      localStorage.setItem(key, JSON.stringify(completed));
+    }
+  };
 
   if (!id || !user) {
     return <Navigate to="/courses" replace />;
@@ -55,135 +89,257 @@ export const CourseViewer: React.FC = () => {
     return <Navigate to={`/courses/${id}`} replace />;
   }
 
-  // Função para calcular módulos concluídos baseado no progressPercentage
-  const getCompletedModules = (progressPercentage: number, totalModules: number) => {
-    if (!progressPercentage || typeof progressPercentage !== 'number' || progressPercentage <= 0) return [];
-    const completedCount = Math.floor((progressPercentage / 100) * totalModules);
-    return Array.from({ length: totalModules }, (_, i) => (i + 1).toString()).slice(0, completedCount);
-  };
+  // Carregar módulos e aulas do curso
+  useEffect(() => {
+    const loadCourseContent = async () => {
+      if (!id) return;
+      
+      try {
+        setLoadingModules(true);
+        const modules = await coursesAPI.getModules(id);
+        
+        // Carregar aulas para cada módulo
+        const modulesWithLessons = await Promise.all(
+          modules.map(async (module: any, moduleIndex: number) => {
+            try {
+              const lessons = await coursesAPI.getLessons(id, module.id);
+              
+              const formattedLessons = lessons.map((lesson: any, lessonIndex: number) => {
+                const baseLesson: any = {
+                  id: lesson.id,
+                  title: lesson.title,
+                  description: lesson.description || '',
+                  contentType: lesson.contentType || 'video',
+                  contentUrl: lesson.contentUrl || '',
+                  durationMinutes: lesson.durationMinutes || 15,
+                  sortOrder: lesson.sortOrder || lessonIndex,
+                  completed: getCompletedLessons(id).includes(lesson.id),
+                  locked: false, // Será calculado depois baseado no progresso
+                  isFree: moduleIndex === 0 && lessonIndex === 0
+                };
 
-  // Módulos do curso (simulados - em produção viriam do banco)
-  const courseModules: CourseModule[] = [
-    {
-      id: '1',
-      title: 'Introdução ao Curso',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 15,
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('1') : false,
-      locked: false,
-    },
-    {
-      id: '2',
-      title: 'Conceitos Fundamentais',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 25,
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('2') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('1') : true,
-    },
-    {
-      id: '3',
-      title: 'Material de Apoio - Capítulo 1',
-      type: 'pdf',
-      content: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('3') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('2') : true,
-    },
-    {
-      id: '4',
-      title: 'Projeto Prático 1',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 45,
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('4') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('3') : true,
-    },
-    {
-      id: '5',
-      title: 'Quiz - Teste seus Conhecimentos',
-      type: 'quiz',
-      content: '',
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('5') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('4') : true,
-    },
-    {
-      id: '6',
-      title: 'Conceitos Avançados',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 35,
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('6') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('5') : true,
-    },
-    {
-      id: '7',
-      title: 'Projeto Final',
-      type: 'video',
-      content: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      duration: 60,
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('7') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('6') : true,
-    },
-    {
-      id: '8',
-      title: 'Avaliação Final',
-      type: 'quiz',
-      content: '',
-      completed: userProgress ? getCompletedModules(userProgress.progressPercentage, 8).includes('8') : false,
-      locked: userProgress ? !getCompletedModules(userProgress.progressPercentage, 8).includes('7') : true,
-    },
-  ];
+                // Se for quiz, carregar as perguntas do banco
+                if (lesson.contentType === 'quiz' && lesson.quizData) {
+                  try {
+                    baseLesson.quizQuestions = JSON.parse(lesson.quizData);
+                  } catch (error) {
+                    console.error('Erro ao parsear dados do quiz:', error);
+                    baseLesson.quizQuestions = [];
+                  }
+                }
 
-  const completedModules = courseModules.filter(m => m.completed).length;
-  const totalModules = courseModules.length;
-  const progressPercentage = (completedModules / totalModules) * 100;
+                return baseLesson;
+              });
+
+              return {
+                id: module.id,
+                title: module.title,
+                description: module.description || '',
+                sortOrder: module.sortOrder || moduleIndex,
+                lessonsCount: formattedLessons.length,
+                lessons: formattedLessons.sort((a, b) => a.sortOrder - b.sortOrder),
+                completed: false, // Será calculado depois
+                locked: false // Será calculado depois
+              };
+            } catch (error) {
+              console.error(`Erro ao carregar aulas do módulo ${module.id}:`, error);
+              return {
+                id: module.id,
+                title: module.title,
+                description: module.description || '',
+                sortOrder: module.sortOrder || moduleIndex,
+                lessonsCount: 0,
+                lessons: [],
+                completed: false,
+                locked: false
+              };
+            }
+          })
+        );
+        
+        // Ordenar módulos por sortOrder
+        const sortedModules = modulesWithLessons.sort((a, b) => a.sortOrder - b.sortOrder);
+        
+        // Aplicar lógica de desbloqueio sequencial
+        for (let i = 0; i < sortedModules.length; i++) {
+          const currentModule = sortedModules[i];
+          const previousModule = i > 0 ? sortedModules[i - 1] : null;
+          
+          // Calcular se o módulo atual está completo
+          currentModule.completed = currentModule.lessons.length > 0 && 
+            currentModule.lessons.every(lesson => lesson.completed);
+          
+          // Primeiro módulo sempre desbloqueado
+          if (i === 0) {
+            currentModule.locked = false;
+            // Primeira aula do primeiro módulo sempre desbloqueada
+            if (currentModule.lessons.length > 0) {
+              currentModule.lessons[0].locked = false;
+            }
+          } else {
+            // Módulos subsequentes só desbloqueiam se o anterior estiver completo
+            currentModule.locked = !previousModule?.completed;
+          }
+          
+          // Aplicar lógica de desbloqueio sequencial nas aulas do módulo
+          if (!currentModule.locked) {
+            for (let j = 0; j < currentModule.lessons.length; j++) {
+              const currentLesson = currentModule.lessons[j];
+              const previousLesson = j > 0 ? currentModule.lessons[j - 1] : null;
+              
+              if (j === 0) {
+                // Primeira aula do módulo sempre desbloqueada se o módulo estiver desbloqueado
+                currentLesson.locked = false;
+              } else {
+                // Aulas subsequentes só desbloqueiam se a anterior estiver completa
+                currentLesson.locked = !previousLesson?.completed;
+              }
+            }
+          } else {
+            // Se o módulo estiver bloqueado, todas as aulas ficam bloqueadas
+            currentModule.lessons.forEach(lesson => {
+              lesson.locked = true;
+            });
+          }
+        }
+        
+        setCourseModules(sortedModules);
+        
+        // Definir primeiro módulo como ativo
+        if (sortedModules.length > 0) {
+          setActiveModule(sortedModules[0]);
+          
+          // Definir primeira aula como ativa
+          if (sortedModules[0].lessons.length > 0) {
+            setActiveLesson(sortedModules[0].lessons[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar conteúdo do curso:', error);
+        setCourseModules([]);
+      } finally {
+        setLoadingModules(false);
+      }
+    };
+
+    loadCourseContent();
+  }, [id, course, userProgress]);
+
+  // Calcular progresso baseado nas aulas individuais, não módulos
+  const allLessons = courseModules.flatMap(m => m.lessons || []);
+  const completedLessons = allLessons.filter(lesson => lesson.completed).length;
+  const totalLessons = allLessons.length;
+  const progressPercentage = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
   const isCompleted = progressPercentage === 100;
 
-  useEffect(() => {
-    if (!activeModule && courseModules.length > 0) {
-      // Encontrar o primeiro módulo não completado ou o primeiro se todos estiverem completos
-      const nextModule = courseModules.find(m => !m.completed && !m.locked) || courseModules[0];
-      setActiveModule(nextModule);
-    }
-  }, []);
+  // Remover o useEffect duplicado pois já está sendo tratado no loadCourseModules
 
-  const handleModuleComplete = (moduleId: string) => {
-    // Calcula novo progresso com o módulo atual marcado como concluído
-    const moduleIndex = courseModules.findIndex(m => m.id === moduleId);
-    if (moduleIndex !== -1 && !courseModules[moduleIndex].completed) {
-      // Marca o módulo como concluído
-      courseModules[moduleIndex].completed = true;
+  const handleLessonComplete = (lessonId: string) => {
+    if (!activeModule || !activeLesson) return;
+    
+    // Atualizar o estado da aula como concluída
+    let updatedModules = courseModules.map(module => {
+      if (module.id === activeModule.id) {
+        const updatedLessons = module.lessons?.map(lesson => 
+          lesson.id === lessonId ? { ...lesson, completed: true } : lesson
+        ) || [];
+        
+        return {
+          ...module,
+          lessons: updatedLessons
+        };
+      }
+      return module;
+    });
+    
+    // Recalcular lógica de desbloqueio sequencial
+    for (let i = 0; i < updatedModules.length; i++) {
+      const currentModule = updatedModules[i];
+      const previousModule = i > 0 ? updatedModules[i - 1] : null;
       
-      // Calcula novo progresso
-      const completedCount = courseModules.filter(m => m.completed).length;
-      const newProgress = Math.min(100, Math.round((completedCount / totalModules) * 100));
+      // Calcular se o módulo atual está completo
+      currentModule.completed = currentModule.lessons.length > 0 && 
+        currentModule.lessons.every(lesson => lesson.completed);
       
-      // Atualiza no backend
-      updateProgress(id, newProgress);
-      
-      // Desbloquear próximo módulo
-      if (moduleIndex + 1 < courseModules.length) {
-        courseModules[moduleIndex + 1].locked = false;
+      // Primeiro módulo sempre desbloqueado
+      if (i === 0) {
+        currentModule.locked = false;
+        // Primeira aula do primeiro módulo sempre desbloqueada
+        if (currentModule.lessons.length > 0) {
+          currentModule.lessons[0].locked = false;
+        }
+      } else {
+        // Módulos subsequentes só desbloqueiam se o anterior estiver completo
+        currentModule.locked = !previousModule?.completed;
       }
       
-      // Força re-render
-      setActiveModule({ ...courseModules[moduleIndex] });
+      // Aplicar lógica de desbloqueio sequencial nas aulas do módulo
+      if (!currentModule.locked) {
+        for (let j = 0; j < currentModule.lessons.length; j++) {
+          const currentLesson = currentModule.lessons[j];
+          const previousLesson = j > 0 ? currentModule.lessons[j - 1] : null;
+          
+          if (j === 0) {
+            // Primeira aula do módulo sempre desbloqueada se o módulo estiver desbloqueado
+            currentLesson.locked = false;
+          } else {
+            // Aulas subsequentes só desbloqueiam se a anterior estiver completa
+            currentLesson.locked = !previousLesson?.completed;
+          }
+        }
+      } else {
+        // Se o módulo estiver bloqueado, todas as aulas ficam bloqueadas
+        currentModule.lessons.forEach(lesson => {
+          lesson.locked = true;
+        });
+      }
+    }
+    
+    setCourseModules(updatedModules);
+    
+    // Calcular novo progresso baseado nas aulas concluídas
+    const allLessons = updatedModules.flatMap(m => m.lessons || []);
+    const completedLessonsCount = allLessons.filter(lesson => lesson.completed).length;
+    const totalLessonsCount = allLessons.length;
+    const newProgress = totalLessonsCount > 0 ? Math.round((completedLessonsCount / totalLessonsCount) * 100) : 0;
+    
+    // Salvar aula como concluída no localStorage
+    saveCompletedLesson(id, lessonId);
+    
+    // Atualizar progresso no backend
+    updateProgress(id, newProgress);
+    
+    console.log(`🎯 Aula "${activeLesson.title}" concluída! Progresso: ${newProgress}%`);
+    
+    // Verificar se um novo módulo foi desbloqueado
+    const nextModuleIndex = updatedModules.findIndex(m => m.id === activeModule.id) + 1;
+    if (nextModuleIndex < updatedModules.length && !updatedModules[nextModuleIndex].locked) {
+      console.log(`🔓 Módulo "${updatedModules[nextModuleIndex].title}" desbloqueado!`);
     }
   };
 
   const handleQuizSubmit = () => {
-    // Simular correção do quiz
-    const totalQuestions = 3;
-    const correctAnswers = Object.values(quizAnswers).filter(answer => answer === 'correct').length;
-    const score = (correctAnswers / totalQuestions) * 100;
+    if (!activeLesson?.quizQuestions) return;
+    
+    // Calcular pontuação baseada nas perguntas reais do quiz
+    const quizQuestions = activeLesson.quizQuestions;
+    let correctAnswers = 0;
+    
+    quizQuestions.forEach((question: any) => {
+      const userAnswer = quizAnswers[`question_${question.id}`];
+      if (userAnswer && parseInt(userAnswer) === question.correctAnswer) {
+        correctAnswers++;
+      }
+    });
+    
+    const score = quizQuestions.length > 0 ? (correctAnswers / quizQuestions.length) * 100 : 0;
     
     setQuizScore(score);
     setQuizSubmitted(true);
     
     // Só marcar como concluído se tiver 70% ou mais
-    if (score >= 70 && activeModule) {
-      handleModuleComplete(activeModule.id);
+    if (score >= 70 && activeLesson) {
+      handleLessonComplete(activeLesson.id);
     }
   };
 
@@ -216,181 +372,218 @@ export const CourseViewer: React.FC = () => {
     }
   };
 
-  const getModuleIcon = (type: string) => {
-    switch (type) {
+  const getContentIcon = (contentType: string) => {
+    switch (contentType) {
       case 'video':
         return <Play className="h-4 w-4" />;
+      case 'file':
+      case 'text':
       case 'pdf':
+      case 'pptx':
         return <FileText className="h-4 w-4" />;
       case 'quiz':
         return <HelpCircle className="h-4 w-4" />;
       default:
-        return <BookOpen className="h-4 w-4" />;
+        return <FileText className="h-4 w-4" />;
     }
   };
 
-  const renderModuleContent = () => {
-    if (!activeModule) return null;
+  const getYouTubeEmbedUrl = (url: string): string => {
+    if (!url) return '';
+    
+    // Extrair ID do vídeo de diferentes formatos de URL do YouTube
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    
+    if (match && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}`;
+    }
+    
+    return '';
+  };
 
-    switch (activeModule.type) {
+  const getGoogleDriveEmbedUrl = (url: string): string => {
+    if (!url) return '';
+    
+    // Converter URL do Google Drive para formato de visualização
+    const driveRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9-_]+)/;
+    const match = url.match(driveRegex);
+    
+    if (match && match[1]) {
+      const fileId = match[1];
+      return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
+    
+    // Se já estiver no formato correto, retornar como está
+    if (url.includes('drive.google.com') && url.includes('preview')) {
+      return url;
+    }
+    
+    return url; // Retornar URL original se não for do Google Drive
+  };
+
+  const renderLessonContent = () => {
+    if (!activeLesson) return null;
+
+    const renderCompleteButton = () => (
+      <div className="mt-6 flex justify-between items-center">
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <Clock className="h-4 w-4" />
+          <span>{activeLesson.durationMinutes} minutos</span>
+        </div>
+        {!activeLesson.completed ? (
+          <button
+            onClick={() => handleLessonComplete(activeLesson.id)}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+          >
+            <CheckCircle className="h-4 w-4" />
+            <span>Marcar como Concluído</span>
+          </button>
+        ) : (
+          <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+            <CheckCircle className="h-4 w-4" />
+            <span className="text-sm font-medium">Aula Concluída</span>
+          </div>
+        )}
+      </div>
+    );
+
+    switch (activeLesson.contentType) {
       case 'video':
+        const embedUrl = getYouTubeEmbedUrl(activeLesson.contentUrl || '');
         return (
           <div className="space-y-4">
-            <div className="aspect-video bg-black rounded-lg overflow-hidden">
-              <iframe
-                src={activeModule.content}
-                className="w-full h-full"
-                frameBorder="0"
-                allowFullScreen
-                title={activeModule.title}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <Clock className="h-4 w-4" />
-                <span>{activeModule.duration} minutos</span>
+            {embedUrl ? (
+              <div className="aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+                <iframe
+                  src={embedUrl}
+                  className="w-full h-full"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title={activeLesson.title}
+                />
               </div>
-              {!activeModule.completed && (
-                <button
-                  onClick={() => handleModuleComplete(activeModule.id)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Marcar como Concluído
-                </button>
+            ) : (
+              <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <Play className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                  <p className="text-gray-600">URL do vídeo inválida</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    URL fornecida: {activeLesson.contentUrl}
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">{activeLesson.title}</h3>
+              {activeLesson.description && (
+                <p className="text-gray-700 text-sm mb-4">{activeLesson.description}</p>
               )}
+              {renderCompleteButton()}
             </div>
           </div>
         );
 
       case 'pdf':
+      case 'pptx':
+      case 'file':
+      case 'text':
+        const driveEmbedUrl = getGoogleDriveEmbedUrl(activeLesson.contentUrl || '');
+        
         return (
           <div className="space-y-4">
-            <div className="h-96 border border-gray-300 rounded-lg overflow-hidden">
-              <iframe
-                src={activeModule.content}
-                className="w-full h-full"
-                title={activeModule.title}
-              />
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+              <div className="h-[600px]">
+                <iframe
+                  src={driveEmbedUrl}
+                  className="w-full h-full"
+                  title={activeLesson.title}
+                  allow="autoplay"
+                />
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <a
-                href={activeModule.content}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-              >
-                <Download className="h-4 w-4" />
-                <span>Baixar PDF</span>
-              </a>
-              {!activeModule.completed && (
-                <button
-                  onClick={() => handleModuleComplete(activeModule.id)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Marcar como Concluído
-                </button>
+            
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">{activeLesson.title}</h3>
+              {activeLesson.description && (
+                <p className="text-gray-700 text-sm mb-4">{activeLesson.description}</p>
               )}
+              
+              <div className="flex items-center justify-between">
+                <a
+                  href={activeLesson.contentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Baixar Arquivo</span>
+                </a>
+                
+                {!activeLesson.completed ? (
+                  <button
+                    onClick={() => handleLessonComplete(activeLesson.id)}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Marcar como Concluído</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Aula Concluída</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
 
       case 'quiz':
+        const quizQuestions = activeLesson.quizQuestions || [];
+        
         return (
           <div className="space-y-6">
             <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-900 mb-2">Instruções do Quiz</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">{activeLesson.title}</h3>
               <p className="text-blue-800 text-sm">
-                Responda todas as perguntas para concluir este módulo. 
+                Responda todas as perguntas para concluir este quiz. 
                 <strong> Você precisa de pelo menos 70% de aprovação para prosseguir.</strong>
               </p>
             </div>
 
             {!quizSubmitted ? (
               <div className="space-y-6">
-                {/* Pergunta 1 */}
-                <div className="bg-white p-6 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-4">
-                    1. Qual é o conceito principal abordado neste curso?
-                  </h4>
-                  <div className="space-y-2">
-                    {[
-                      { value: 'wrong1', label: 'Conceito incorreto A' },
-                      { value: 'correct', label: 'Conceito correto principal' },
-                      { value: 'wrong2', label: 'Conceito incorreto B' },
-                      { value: 'wrong3', label: 'Conceito incorreto C' },
-                    ].map((option) => (
-                      <label key={option.value} className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          name="question1"
-                          value={option.value}
-                          checked={quizAnswers.question1 === option.value}
-                          onChange={(e) => setQuizAnswers({ ...quizAnswers, question1: e.target.value })}
-                          className="text-blue-600"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
+                {quizQuestions.map((question: any, questionIndex: number) => (
+                  <div key={question.id} className="bg-white p-6 rounded-lg border border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-4">
+                      {questionIndex + 1}. {question.question}
+                    </h4>
+                    <div className="space-y-2">
+                      {question.options.map((option: string, optionIndex: number) => (
+                        <label key={optionIndex} className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            name={`question_${question.id}`}
+                            value={optionIndex.toString()}
+                            checked={quizAnswers[`question_${question.id}`] === optionIndex.toString()}
+                            onChange={(e) => setQuizAnswers({ 
+                              ...quizAnswers, 
+                              [`question_${question.id}`]: e.target.value 
+                            })}
+                            className="text-blue-600"
+                          />
+                          <span>{option}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                {/* Pergunta 2 */}
-                <div className="bg-white p-6 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-4">
-                    2. Qual é a melhor prática mencionada no curso?
-                  </h4>
-                  <div className="space-y-2">
-                    {[
-                      { value: 'wrong1', label: 'Prática incorreta A' },
-                      { value: 'wrong2', label: 'Prática incorreta B' },
-                      { value: 'correct', label: 'Prática correta recomendada' },
-                      { value: 'wrong3', label: 'Prática incorreta C' },
-                    ].map((option) => (
-                      <label key={option.value} className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          name="question2"
-                          value={option.value}
-                          checked={quizAnswers.question2 === option.value}
-                          onChange={(e) => setQuizAnswers({ ...quizAnswers, question2: e.target.value })}
-                          className="text-blue-600"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Pergunta 3 */}
-                <div className="bg-white p-6 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-4">
-                    3. Como aplicar o conhecimento na prática?
-                  </h4>
-                  <div className="space-y-2">
-                    {[
-                      { value: 'correct', label: 'Aplicação prática correta' },
-                      { value: 'wrong1', label: 'Aplicação incorreta A' },
-                      { value: 'wrong2', label: 'Aplicação incorreta B' },
-                      { value: 'wrong3', label: 'Aplicação incorreta C' },
-                    ].map((option) => (
-                      <label key={option.value} className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          name="question3"
-                          value={option.value}
-                          checked={quizAnswers.question3 === option.value}
-                          onChange={(e) => setQuizAnswers({ ...quizAnswers, question3: e.target.value })}
-                          className="text-blue-600"
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                ))}
 
                 <button
                   onClick={handleQuizSubmit}
-                  disabled={Object.keys(quizAnswers).length < 3}
+                  disabled={Object.keys(quizAnswers).length < quizQuestions.length}
                   className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Enviar Respostas
@@ -442,7 +635,12 @@ export const CourseViewer: React.FC = () => {
         );
 
       default:
-        return <div>Tipo de conteúdo não suportado</div>;
+        return (
+          <div className="text-center py-8">
+            <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <p className="text-gray-600">Tipo de conteúdo não suportado</p>
+          </div>
+        );
     }
   };
 
@@ -497,7 +695,7 @@ export const CourseViewer: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-gray-900">Progresso do Curso</h3>
           <span className="text-sm text-gray-600">
-            {completedModules} de {totalModules} módulos concluídos
+            {completedLessons} de {totalLessons} aulas concluídas
           </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-3">
@@ -526,72 +724,116 @@ export const CourseViewer: React.FC = () => {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-24">
             <h3 className="font-semibold text-gray-900 mb-4">Módulos do Curso</h3>
-            <div className="space-y-2">
-              {courseModules.map((module, index) => (
-                <button
-                  key={module.id}
-                  onClick={() => !module.locked && setActiveModule(module)}
-                  disabled={module.locked}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    activeModule?.id === module.id
-                      ? 'bg-blue-50 border border-blue-200'
-                      : module.locked
-                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      {module.completed ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : module.locked ? (
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      ) : (
-                        <div className={`p-1 rounded ${
-                          activeModule?.id === module.id ? 'text-blue-600' : 'text-gray-600'
-                        }`}>
-                          {getModuleIcon(module.type)}
+            {loadingModules ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent mx-auto mb-2" />
+                <p className="text-sm text-gray-600">Carregando módulos...</p>
+              </div>
+            ) : courseModules.length > 0 ? (
+              <div className="space-y-2">
+                {courseModules.map((module, index) => (
+                  <div key={module.id}>
+                    <button
+                      onClick={() => !module.locked && setActiveModule(module)}
+                      disabled={module.locked}
+                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        activeModule?.id === module.id
+                          ? 'bg-blue-50 border border-blue-200'
+                          : module.locked
+                          ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-shrink-0">
+                          {module.completed ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          ) : module.locked ? (
+                            <Lock className="h-5 w-5 text-gray-400" />
+                          ) : (
+                            <div className={`p-1 rounded ${
+                              activeModule?.id === module.id ? 'text-blue-600' : 'text-gray-600'
+                            }`}>
+                              <BookOpen className="h-4 w-4" />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${
-                        module.locked ? 'text-gray-400' : 'text-gray-900'
-                      }`}>
-                        {index + 1}. {module.title}
-                      </p>
-                      {module.duration && (
-                        <p className="text-xs text-gray-500">{module.duration} min</p>
-                      )}
-                    </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${
+                            module.locked ? 'text-gray-400' : 'text-gray-900'
+                          }`}>
+                            {index + 1}. {module.title}
+                          </p>
+                          <p className="text-xs text-gray-500">{module.lessonsCount} aulas</p>
+                        </div>
+                      </div>
+                    </button>
+                    
+                    {/* Lista de aulas do módulo ativo */}
+                    {activeModule?.id === module.id && module.lessons && (
+                      <div className="ml-8 mt-2 space-y-1">
+                        {module.lessons.map((lesson, lessonIndex) => (
+                          <button
+                            key={lesson.id}
+                            onClick={() => setActiveLesson(lesson)}
+                            className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                              activeLesson?.id === lesson.id
+                                ? 'bg-blue-100 text-blue-900'
+                                : 'hover:bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-shrink-0">
+                                {lesson.completed ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <div className="text-gray-400">
+                                    {getContentIcon(lesson.contentType)}
+                                  </div>
+                                )}
+                              </div>
+                              <span>{lessonIndex + 1}. {lesson.title}</span>
+                              {lesson.durationMinutes > 0 && (
+                                <span className="text-xs text-gray-500">({lesson.durationMinutes}min)</span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </button>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <BookOpen className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-600">Nenhum módulo encontrado</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Conteúdo Principal */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            {activeModule ? (
+            {activeLesson ? (
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      {getModuleIcon(activeModule.type)}
+                      {getContentIcon(activeLesson.contentType)}
                     </div>
                     <div>
                       <h2 className="text-xl font-semibold text-gray-900">
-                        {activeModule.title}
+                        {activeLesson.title}
                       </h2>
                       <p className="text-gray-600 text-sm">
-                        Módulo {courseModules.findIndex(m => m.id === activeModule.id) + 1} de {courseModules.length}
+                        {activeModule?.title} - Aula {(activeModule?.lessons?.findIndex(l => l.id === activeLesson.id) ?? -1) + 1}
                       </p>
                     </div>
                   </div>
                   
-                  {activeModule.completed && (
+                  {activeLesson.completed && (
                     <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-1 rounded-full">
                       <CheckCircle className="h-4 w-4" />
                       <span className="text-sm font-medium">Concluído</span>
@@ -599,7 +841,57 @@ export const CourseViewer: React.FC = () => {
                   )}
                 </div>
 
-                {renderModuleContent()}
+                {renderLessonContent()}
+              </div>
+            ) : activeModule ? (
+              <div className="text-center py-12">
+                <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {activeModule.title}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {activeModule.description || 'Selecione uma aula para começar'}
+                </p>
+                {activeModule.lessons && activeModule.lessons.length > 0 ? (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-4">
+                      {activeModule.lessons.length} aula{activeModule.lessons.length !== 1 ? 's' : ''} disponível{activeModule.lessons.length !== 1 ? 'is' : ''}
+                    </p>
+                    <div className="text-left max-w-md mx-auto space-y-2">
+                      {activeModule.lessons.map((lesson, index) => (
+                        <button
+                          key={lesson.id}
+                          onClick={() => setActiveLesson(lesson)}
+                          className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-shrink-0">
+                              {lesson.completed ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <div className="p-1 rounded text-gray-600">
+                                  {getContentIcon(lesson.contentType)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">
+                                {index + 1}. {lesson.title}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {lesson.durationMinutes} min • {lesson.contentType}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Nenhuma aula disponível neste módulo
+                  </p>
+                )}
               </div>
             ) : (
               <div className="text-center py-12">
