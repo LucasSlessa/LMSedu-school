@@ -225,8 +225,7 @@ export const AdminCourseForm: React.FC = () => {
           if (!hasValidQuestions) {
             newErrors[`module-${index}-lesson-${lessonIndex}-quiz`] = `Aula ${lessonIndex + 1} do módulo ${index + 1}: Complete pelo menos uma pergunta do questionário`;
           }
-        }
-        if (lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+          
           lesson.quizQuestions.forEach((question, qIndex) => {
             if (!question.question || !question.question.trim()) {
               newErrors[`module-${index}-lesson-${lessonIndex}-question-${qIndex}`] = `Pergunta ${qIndex + 1} da aula ${lessonIndex + 1} do módulo ${index + 1}: Texto da pergunta é obrigatório`;
@@ -259,8 +258,24 @@ export const AdminCourseForm: React.FC = () => {
     setLoading(true);
     
     try {
-      const courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'> = {
-        ...formData,
+      // Find category ID from category name
+      const selectedCategory = categories.find(cat => cat.name === formData.category);
+      const categoryId = selectedCategory?.id || null;
+      
+      // Create course data object matching backend API expectations
+      const courseData = {
+        title: formData.title,
+        description: formData.description,
+        shortDescription: formData.shortDescription,
+        price: formData.price,
+        durationHours: formData.duration,
+        instructor: formData.instructor,
+        categoryId: categoryId,
+        imageUrl: formData.image,
+        level: formData.level,
+        requirements: '',
+        whatYouLearn: '',
+        targetAudience: ''
       };
       
       console.log('📊 Dados do curso para salvar:', courseData);
@@ -272,11 +287,18 @@ export const AdminCourseForm: React.FC = () => {
         savedCourse = existingCourse;
       } else {
         console.log('🆕 Criando novo curso...');
-        const newCourse = await addCourse(courseData);
+        const newCourse = await addCourse(courseData as any);
         savedCourse = newCourse;
       }
       
       // Salvar módulos e aulas
+      console.log('🔍 Verificando salvamento de módulos:', {
+        savedCourse: !!savedCourse,
+        savedCourseId: savedCourse?.id,
+        modulesLength: modules.length,
+        modules: modules.map(m => ({ id: m.id, title: m.title }))
+      });
+      
       if (savedCourse && modules.length > 0) {
         console.log('📚 Salvando módulos e aulas...');
         
@@ -284,7 +306,7 @@ export const AdminCourseForm: React.FC = () => {
           const module = modules[i];
           let savedModuleId = module.id;
           
-          if (isEditing && module.id && !module.id.startsWith('temp-')) {
+          if (isEditing && module.id && !module.id.startsWith('temp-') && existingCourse) {
             // Atualizar módulo existente
             try {
               await updateModuleAPI(savedCourse.id, module.id, {
@@ -299,15 +321,33 @@ export const AdminCourseForm: React.FC = () => {
           } else {
             // Criar novo módulo
             try {
+              console.log(`🔄 Tentando criar módulo "${module.title}" para curso ID: ${savedCourse.id}`);
+              console.log(`📊 Dados do módulo:`, {
+                title: module.title,
+                description: module.description,
+                sortOrder: i,
+                courseId: savedCourse.id
+              });
+              
               const newModule = await createModuleAPI(savedCourse.id, {
                 title: module.title,
                 description: module.description,
                 sortOrder: i
               });
               savedModuleId = newModule.id;
-              console.log(`✅ Módulo "${module.title}" criado com sucesso`);
+              console.log(`✅ Módulo "${module.title}" criado com sucesso, ID: ${savedModuleId}`);
             } catch (error) {
               console.error(`❌ Erro ao criar módulo "${module.title}":`, error);
+              console.error(`🔍 Detalhes do erro:`, {
+                courseId: savedCourse.id,
+                moduleData: {
+                  title: module.title,
+                  description: module.description,
+                  sortOrder: i
+                },
+                errorMessage: (error as Error).message,
+                errorStack: (error as Error).stack
+              });
               continue; // Pular para o próximo módulo se houver erro
             }
           }
@@ -323,6 +363,11 @@ export const AdminCourseForm: React.FC = () => {
                 // Preparar quiz questions com estrutura correta
                 let processedQuizQuestions = null;
                 if (lesson.type === 'quiz' && lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+                  console.log(`🎯 Processando quiz questions para aula "${lesson.title}":`, {
+                    originalQuizQuestions: lesson.quizQuestions,
+                    questionsCount: lesson.quizQuestions.length
+                  });
+                  
                   processedQuizQuestions = lesson.quizQuestions.map(q => ({
                     id: q.id,
                     question: q.question,
@@ -333,6 +378,14 @@ export const AdminCourseForm: React.FC = () => {
                     required: q.required !== false,
                     points: q.points || 1
                   }));
+                  
+                  console.log(`✅ Quiz questions processadas:`, processedQuizQuestions);
+                } else {
+                  console.log(`⚠️ Aula "${lesson.title}" não tem quiz questions válidas:`, {
+                    type: lesson.type,
+                    hasQuizQuestions: !!lesson.quizQuestions,
+                    quizQuestionsLength: lesson.quizQuestions?.length
+                  });
                 }
 
                 const lessonData = {
@@ -355,7 +408,7 @@ export const AdminCourseForm: React.FC = () => {
                   lessonDataToSend: lessonData
                 });
 
-                if (isEditing && lesson.id && !lesson.id.startsWith('temp-')) {
+                if (isEditing && lesson.id && !lesson.id.startsWith('temp-') && existingCourse) {
                   // Atualizar aula existente
                   await updateLessonAPI(savedCourse.id, savedModuleId, lesson.id, lessonData);
                   console.log(`✅ Aula "${lesson.title}" atualizada com sucesso`);

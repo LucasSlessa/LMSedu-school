@@ -439,8 +439,20 @@ router.post('/:courseId/modules', authenticateToken, requireRole(['admin', 'inst
     console.log('✅ Módulo criado com sucesso:', newModule);
     res.status(201).json(newModule);
   } catch (error) {
-    console.error('❌ Erro ao criar módulo:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    console.error('❌ Erro ao criar módulo:', {
+      courseId: req.params.courseId,
+      requestBody: req.body,
+      userId: req.user?.id,
+      userRole: req.user?.role,
+      errorMessage: error.message,
+      errorCode: error.code,
+      errorDetail: error.detail,
+      errorStack: error.stack
+    });
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -638,7 +650,7 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
         description: row.description,
         contentType: row.content_type,
         contentUrl: row.content_url,
-        quizQuestions,
+        quiz_questions: quizQuestions, // Frontend expects snake_case
         durationMinutes: row.duration_minutes,
         sortOrder: row.sort_order,
         isFree: row.is_free,

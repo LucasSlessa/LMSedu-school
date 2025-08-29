@@ -138,34 +138,29 @@ export const CourseViewer: React.FC = () => {
 
                 // Se for quiz, carregar as perguntas do banco
                 if (lesson.contentType === 'quiz') {
-                  console.log('🎯 Processando aula de quiz no frontend:', {
+                  console.log('🎯 Frontend processando aula de quiz:', {
                     lessonId: lesson.id,
                     lessonTitle: lesson.title,
-                    hasQuizQuestions: !!lesson.quizQuestions,
-                    quizQuestionsType: typeof lesson.quizQuestions,
-                    quizQuestionsValue: lesson.quizQuestions,
-                    rawLesson: lesson
+                    hasQuizQuestions: !!lesson.quiz_questions,
+                    quizQuestionsType: typeof lesson.quiz_questions,
+                    quizQuestionsValue: lesson.quiz_questions,
+                    fullLesson: lesson
                   });
                   
-                  // Garantir que quizQuestions seja sempre preservado
-                  if (lesson.quizQuestions && Array.isArray(lesson.quizQuestions) && lesson.quizQuestions.length > 0) {
-                    baseLesson.quizQuestions = lesson.quizQuestions;
-                    console.log('✅ Quiz questions preservadas no frontend:', baseLesson.quizQuestions);
-                  } else if (lesson.quizQuestions && typeof lesson.quizQuestions === 'string') {
+                  if (lesson.quiz_questions) {
                     try {
-                      baseLesson.quizQuestions = JSON.parse(lesson.quizQuestions);
-                      console.log('✅ Quiz questions parsed no frontend:', baseLesson.quizQuestions);
+                      baseLesson.quizQuestions = typeof lesson.quiz_questions === 'string' 
+                        ? JSON.parse(lesson.quiz_questions) 
+                        : lesson.quiz_questions;
+                      console.log('✅ Quiz questions parsed:', baseLesson.quizQuestions);
                     } catch (error) {
                       console.error('❌ Erro ao parsear dados do quiz:', error);
                       baseLesson.quizQuestions = [];
                     }
                   } else {
-                    console.log('⚠️ lesson.quizQuestions é null/undefined/empty no frontend');
+                    console.log('⚠️ lesson.quiz_questions é null/undefined');
                     baseLesson.quizQuestions = [];
                   }
-                } else {
-                  // Para aulas que não são quiz, garantir que não tenham quizQuestions
-                  baseLesson.quizQuestions = [];
                 }
 
                 return baseLesson;
@@ -251,15 +246,7 @@ export const CourseViewer: React.FC = () => {
           
           // Definir primeira aula como ativa
           if (sortedModules[0].lessons.length > 0) {
-            const firstLesson = sortedModules[0].lessons[0];
-            console.log('🎯 Definindo primeira aula como ativa:', {
-              lessonId: firstLesson.id,
-              lessonTitle: firstLesson.title,
-              contentType: firstLesson.contentType,
-              hasQuizQuestions: !!firstLesson.quizQuestions,
-              quizQuestions: firstLesson.quizQuestions
-            });
-            setActiveLesson(firstLesson);
+            setActiveLesson(sortedModules[0].lessons[0]);
           }
         }
       } catch (error) {
@@ -621,7 +608,7 @@ export const CourseViewer: React.FC = () => {
       case 'quiz':
         const quizQuestions = activeLesson.quizQuestions || [];
         
-        console.log('🎯 Renderizando quiz - DEBUG COMPLETO:', {
+        console.log('🎯 Renderizando quiz:', {
           lessonTitle: activeLesson.title,
           lessonId: activeLesson.id,
           contentType: activeLesson.contentType,
@@ -629,9 +616,7 @@ export const CourseViewer: React.FC = () => {
           quizQuestionsType: typeof activeLesson.quizQuestions,
           questionsCount: quizQuestions.length,
           questions: quizQuestions,
-          fullLesson: activeLesson,
-          activeLessonKeys: Object.keys(activeLesson),
-          quizQuestionsRaw: activeLesson.quizQuestions
+          fullLesson: activeLesson
         });
         
         if (quizQuestions.length === 0) {
