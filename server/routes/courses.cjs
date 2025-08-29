@@ -366,6 +366,8 @@ router.get('/:courseId/modules', async (req, res) => {
   try {
     const { courseId } = req.params;
     
+    console.log('🔍 Buscando módulos para o curso:', courseId);
+    
     const result = await executeQuery(`
       SELECT 
         cm.*,
@@ -377,6 +379,8 @@ router.get('/:courseId/modules', async (req, res) => {
       ORDER BY cm.sort_order ASC, cm.created_at ASC
     `, [courseId]);
     
+    console.log(`📚 Encontrados ${result.rows.length} módulos`);
+    
     const modules = result.rows.map(row => ({
       id: row.id,
       title: row.title,
@@ -387,9 +391,10 @@ router.get('/:courseId/modules', async (req, res) => {
       updatedAt: row.updated_at
     }));
 
+    console.log('✅ Módulos processados:', modules.map(m => ({ id: m.id, title: m.title, lessonsCount: m.lessonsCount })));
     res.json(modules);
   } catch (error) {
-    console.error('Erro ao buscar módulos:', error);
+    console.error('❌ Erro ao buscar módulos:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -399,6 +404,8 @@ router.post('/:courseId/modules', authenticateToken, requireRole(['admin', 'inst
   try {
     const { courseId } = req.params;
     const { title, description, sortOrder = 0 } = req.body;
+    
+    console.log('📝 Criando módulo:', { courseId, title, description, sortOrder });
     
     // Verificar se o usuário pode editar este curso
     const courseCheck = await executeQuery(
@@ -429,9 +436,10 @@ router.post('/:courseId/modules', authenticateToken, requireRole(['admin', 'inst
       updatedAt: result.rows[0].updated_at
     };
 
+    console.log('✅ Módulo criado com sucesso:', newModule);
     res.status(201).json(newModule);
   } catch (error) {
-    console.error('Erro ao criar módulo:', error);
+    console.error('❌ Erro ao criar módulo:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -532,6 +540,8 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
   try {
     const { moduleId } = req.params;
     
+    console.log('🔍 Buscando aulas para módulo:', moduleId);
+    
     const result = await executeQuery(`
       SELECT 
         cl.*
@@ -540,24 +550,52 @@ router.get('/:courseId/modules/:moduleId/lessons', async (req, res) => {
       ORDER BY cl.sort_order ASC, cl.created_at ASC
     `, [moduleId]);
     
-    const lessons = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      contentType: row.content_type,
-      contentUrl: row.content_url,
-      quizQuestions: row.quiz_questions ? JSON.parse(row.quiz_questions) : null,
-      durationMinutes: row.duration_minutes,
-      sortOrder: row.sort_order,
-      isFree: row.is_free,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }));
+    console.log(`📚 Encontradas ${result.rows.length} aulas`);
+    
+    const lessons = result.rows.map((row, index) => {
+      let quizQuestions = null;
+      
+      // Parse quiz_questions com tratamento de erro
+      if (row.quiz_questions) {
+        try {
+          if (typeof row.quiz_questions === 'string') {
+            quizQuestions = JSON.parse(row.quiz_questions);
+          } else {
+            quizQuestions = row.quiz_questions; // Já é objeto
+          }
+          console.log(`✅ Aula ${index + 1} (${row.title}): Quiz parsed com sucesso`);
+        } catch (parseError) {
+          console.error(`❌ Erro ao fazer parse de quiz_questions na aula ${index + 1}:`, parseError.message);
+          console.error('📄 Dados problemáticos (primeiros 200 chars):', 
+            typeof row.quiz_questions === 'string' 
+              ? row.quiz_questions.substring(0, 200) 
+              : JSON.stringify(row.quiz_questions).substring(0, 200)
+          );
+          quizQuestions = null;
+        }
+      }
+      
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        contentType: row.content_type,
+        contentUrl: row.content_url,
+        quizQuestions,
+        durationMinutes: row.duration_minutes,
+        sortOrder: row.sort_order,
+        isFree: row.is_free,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    });
 
+    console.log('✅ Retornando aulas processadas');
     res.json(lessons);
   } catch (error) {
-    console.error('Erro ao buscar aulas:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    console.error('❌ Erro ao buscar aulas:', error);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 });
 
@@ -567,7 +605,14 @@ router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRo
     const { courseId, moduleId } = req.params;
     const { title, description, contentType, contentUrl, durationMinutes, sortOrder = 0, isFree = false, quizQuestions } = req.body;
     
-    console.log(' Dados recebidos para criar aula:', { title, contentType, contentUrl, quizQuestions });
+    console.log('📝 Dados recebidos para criar aula:', { 
+      title, 
+      contentType, 
+      contentUrl, 
+      hasQuizQuestions: !!quizQuestions,
+      quizQuestionsCount: Array.isArray(quizQuestions) ? quizQuestions.length : 0,
+      quizQuestions 
+    });
     
     // Verificar se o usuário pode editar este curso
     const courseCheck = await executeQuery(
@@ -592,13 +637,23 @@ router.post('/:courseId/modules/:moduleId/lessons', authenticateToken, requireRo
       RETURNING *
     `, [moduleId, title, description, contentType, contentUrl, quizQuestionsJson, durationMinutes, sortOrder, isFree]);
 
+    let parsedQuizQuestions = null;
+    if (result.rows[0].quiz_questions) {
+      try {
+        parsedQuizQuestions = JSON.parse(result.rows[0].quiz_questions);
+      } catch (parseError) {
+        console.error('Erro ao fazer parse de quiz_questions na criação:', parseError);
+        parsedQuizQuestions = null;
+      }
+    }
+
     const newLesson = {
       id: result.rows[0].id,
       title: result.rows[0].title,
       description: result.rows[0].description,
       contentType: result.rows[0].content_type,
       contentUrl: result.rows[0].content_url,
-      quizQuestions: result.rows[0].quiz_questions ? JSON.parse(result.rows[0].quiz_questions) : null,
+      quizQuestions: parsedQuizQuestions,
       durationMinutes: result.rows[0].duration_minutes,
       sortOrder: result.rows[0].sort_order,
       isFree: result.rows[0].is_free,
@@ -650,13 +705,29 @@ router.put('/:courseId/modules/:moduleId/lessons/:lessonId', authenticateToken, 
       return res.status(404).json({ error: 'Aula não encontrada' });
     }
 
+    let updatedQuizQuestions = null;
+    if (result.rows[0].quiz_questions) {
+      try {
+        if (typeof result.rows[0].quiz_questions === 'string') {
+          updatedQuizQuestions = JSON.parse(result.rows[0].quiz_questions);
+        } else {
+          updatedQuizQuestions = result.rows[0].quiz_questions; // Já é objeto
+        }
+      } catch (parseError) {
+        console.error('Erro ao fazer parse de quiz_questions na atualização:', parseError);
+        console.error('Tipo dos dados:', typeof result.rows[0].quiz_questions);
+        console.error('Dados recebidos:', result.rows[0].quiz_questions);
+        updatedQuizQuestions = null;
+      }
+    }
+
     const updatedLesson = {
       id: result.rows[0].id,
       title: result.rows[0].title,
       description: result.rows[0].description,
       contentType: result.rows[0].content_type,
       contentUrl: result.rows[0].content_url,
-      quizQuestions: result.rows[0].quiz_questions ? JSON.parse(result.rows[0].quiz_questions) : null,
+      quizQuestions: updatedQuizQuestions,
       durationMinutes: result.rows[0].duration_minutes,
       sortOrder: result.rows[0].sort_order,
       isFree: result.rows[0].is_free,

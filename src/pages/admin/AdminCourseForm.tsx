@@ -111,8 +111,10 @@ export const AdminCourseForm: React.FC = () => {
     const loadExistingModules = async () => {
       if (isEditing && existingCourse) {
         setLoadingModules(true);
+        console.log('🔄 Carregando módulos existentes para o curso:', existingCourse.id);
         try {
           const courseModules = await getModules(existingCourse.id);
+          console.log('📚 Módulos encontrados:', courseModules);
           if (courseModules && courseModules.length > 0) {
             const formattedModules = await Promise.all(
               courseModules.map(async (module: any, index: number) => {
@@ -133,13 +135,10 @@ export const AdminCourseForm: React.FC = () => {
                     };
 
                     // Se for quiz, carregar as perguntas
-                    if (lesson.contentType === 'quiz' && lesson.quizData) {
-                      try {
-                        baseLesson.quizQuestions = JSON.parse(lesson.quizData);
-                      } catch (error) {
-                        console.error('Erro ao parsear dados do quiz:', error);
-                        baseLesson.quizQuestions = [];
-                      }
+                    if (lesson.contentType === 'quiz' && lesson.quizQuestions) {
+                      baseLesson.quizQuestions = lesson.quizQuestions;
+                    } else if (lesson.contentType === 'quiz') {
+                      baseLesson.quizQuestions = [];
                     }
 
                     return baseLesson;
@@ -157,10 +156,15 @@ export const AdminCourseForm: React.FC = () => {
                 };
               })
             );
+            console.log('✅ Módulos formatados e carregados:', formattedModules);
             setModules(formattedModules);
+          } else {
+            console.log('📭 Nenhum módulo encontrado para este curso');
+            setModules([]);
           }
         } catch (error) {
-          console.error('Erro ao carregar módulos:', error);
+          console.error('❌ Erro ao carregar módulos:', error);
+          setModules([]);
         } finally {
           setLoadingModules(false);
         }
@@ -301,11 +305,16 @@ export const AdminCourseForm: React.FC = () => {
                   durationMinutes: lesson.duration,
                   sortOrder: j,
                   isFree: j === 0 && i === 0,
-                  // Adicionar dados específicos do quiz se for do tipo quiz
-                  ...(lesson.type === 'quiz' && lesson.quizQuestions && {
-                    quizData: JSON.stringify(lesson.quizQuestions)
-                  })
+                  quizQuestions: lesson.type === 'quiz' ? lesson.quizQuestions || [] : null
                 };
+
+                console.log(`🔍 Dados da aula "${lesson.title}":`, {
+                  type: lesson.type,
+                  hasQuizQuestions: !!lesson.quizQuestions,
+                  quizQuestionsCount: lesson.quizQuestions?.length || 0,
+                  quizQuestions: lesson.quizQuestions,
+                  lessonDataToSend: lessonData
+                });
 
                 if (isEditing && lesson.id && !lesson.id.startsWith('temp-')) {
                   // Atualizar aula existente

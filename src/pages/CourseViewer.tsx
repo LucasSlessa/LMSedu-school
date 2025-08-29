@@ -80,12 +80,26 @@ export const CourseViewer: React.FC = () => {
   const purchasedCourses = getPurchasedCourses();
   const hasPurchased = purchasedCourses.some(c => c.id === id);
   const userProgress = getUserProgress(id);
+  const isAdmin = user?.role === 'admin';
+
+  console.log('🔍 CourseViewer - Verificação de acesso:', {
+    courseId: id,
+    userId: user?.id,
+    userRole: user?.role,
+    hasPurchased,
+    isAdmin,
+    purchasedCoursesCount: purchasedCourses.length,
+    courseExists: !!course
+  });
 
   if (!course) {
+    console.log('❌ Curso não encontrado, redirecionando para /courses');
     return <Navigate to="/courses" replace />;
   }
 
-  if (!hasPurchased) {
+  // Permitir acesso se o usuário comprou o curso OU se é admin
+  if (!hasPurchased && !isAdmin) {
+    console.log('❌ Usuário não possui o curso e não é admin, redirecionando para página de compra');
     return <Navigate to={`/courses/${id}`} replace />;
   }
 
@@ -325,16 +339,37 @@ export const CourseViewer: React.FC = () => {
     const quizQuestions = activeLesson.quizQuestions;
     let correctAnswers = 0;
     
-    quizQuestions.forEach((question: any) => {
-      const userAnswer = quizAnswers[`question_${question.id}`];
-      if (userAnswer && parseInt(userAnswer) === question.correctAnswer) {
+    console.log('🎯 Calculando pontuação do quiz:', {
+      totalQuestions: quizQuestions.length,
+      userAnswers: quizAnswers
+    });
+    
+    quizQuestions.forEach((question: any, index: number) => {
+      const questionKey = `question_${question.id || index}`;
+      const userAnswer = quizAnswers[questionKey];
+      const correctAnswer = question.correctAnswer;
+      
+      console.log(`Pergunta ${index + 1}:`, {
+        question: question.question,
+        userAnswer,
+        correctAnswer,
+        isCorrect: userAnswer && parseInt(userAnswer) === correctAnswer
+      });
+      
+      if (userAnswer && parseInt(userAnswer) === correctAnswer) {
         correctAnswers++;
       }
     });
     
     const score = quizQuestions.length > 0 ? (correctAnswers / quizQuestions.length) * 100 : 0;
     
-    setQuizScore(score);
+    console.log('📊 Resultado final:', {
+      correctAnswers,
+      totalQuestions: quizQuestions.length,
+      score: Math.round(score)
+    });
+    
+    setQuizScore(Math.round(score));
     setQuizSubmitted(true);
     
     // Só marcar como concluído se tiver 70% ou mais
@@ -543,6 +578,24 @@ export const CourseViewer: React.FC = () => {
       case 'quiz':
         const quizQuestions = activeLesson.quizQuestions || [];
         
+        console.log('🎯 Renderizando quiz:', {
+          lessonTitle: activeLesson.title,
+          hasQuizQuestions: !!activeLesson.quizQuestions,
+          questionsCount: quizQuestions.length,
+          questions: quizQuestions
+        });
+        
+        if (quizQuestions.length === 0) {
+          return (
+            <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+              <h3 className="font-semibold text-yellow-900 mb-2">Quiz não configurado</h3>
+              <p className="text-yellow-800">
+                Este quiz ainda não possui perguntas configuradas. Entre em contato com o instrutor.
+              </p>
+            </div>
+          );
+        }
+        
         return (
           <div className="space-y-6">
             <div className="bg-blue-50 p-4 rounded-lg">
@@ -551,32 +604,35 @@ export const CourseViewer: React.FC = () => {
                 Responda todas as perguntas para concluir este quiz. 
                 <strong> Você precisa de pelo menos 70% de aprovação para prosseguir.</strong>
               </p>
+              <p className="text-blue-700 text-xs mt-2">
+                Total de perguntas: {quizQuestions.length}
+              </p>
             </div>
 
             {!quizSubmitted ? (
               <div className="space-y-6">
                 {quizQuestions.map((question: any, questionIndex: number) => (
-                  <div key={question.id} className="bg-white p-6 rounded-lg border border-gray-200">
+                  <div key={question.id || questionIndex} className="bg-white p-6 rounded-lg border border-gray-200">
                     <h4 className="font-medium text-gray-900 mb-4">
                       {questionIndex + 1}. {question.question}
                     </h4>
                     <div className="space-y-2">
-                      {question.options.map((option: string, optionIndex: number) => (
+                      {question.options?.map((option: string, optionIndex: number) => (
                         <label key={optionIndex} className="flex items-center space-x-2">
                           <input
                             type="radio"
-                            name={`question_${question.id}`}
+                            name={`question_${question.id || questionIndex}`}
                             value={optionIndex.toString()}
-                            checked={quizAnswers[`question_${question.id}`] === optionIndex.toString()}
+                            checked={quizAnswers[`question_${question.id || questionIndex}`] === optionIndex.toString()}
                             onChange={(e) => setQuizAnswers({ 
                               ...quizAnswers, 
-                              [`question_${question.id}`]: e.target.value 
+                              [`question_${question.id || questionIndex}`]: e.target.value 
                             })}
                             className="text-blue-600"
                           />
                           <span>{option}</span>
                         </label>
-                      ))}
+                      )) || <p className="text-gray-500 italic">Opções não configuradas</p>}
                     </div>
                   </div>
                 ))}
@@ -586,7 +642,7 @@ export const CourseViewer: React.FC = () => {
                   disabled={Object.keys(quizAnswers).length < quizQuestions.length}
                   className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Enviar Respostas
+                  Enviar Respostas ({Object.keys(quizAnswers).length}/{quizQuestions.length})
                 </button>
               </div>
             ) : (
