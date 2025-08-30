@@ -10,7 +10,6 @@ const ordersRoutes = require('./routes/orders.cjs');
 const enrollmentsRoutes = require('./routes/enrollments.cjs');
 const stripeRoutes = require('./routes/stripe.cjs');
 const reportsRoutes = require('./routes/reports.cjs');
-const usersRoutes = require('./routes/users.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,13 +18,6 @@ const PORT = process.env.PORT || 3001;
 if (process.env.NODE_ENV === 'production') {
   const path = require('path');
   app.use(express.static(path.join(__dirname, '../dist')));
-  
-  // Handle React Router
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '../dist/index.html'));
-    }
-  });
 }
 
 // Middleware
@@ -80,10 +72,22 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Rota 404
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Rota não encontrada' });
-});
+// Handle React Router - deve vir APÓS todas as rotas API
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(__dirname, '../dist/index.html'));
+    } else {
+      res.status(404).json({ error: 'Rota da API não encontrada' });
+    }
+  });
+} else {
+  // Rota 404 para desenvolvimento
+  app.use('*', (req, res) => {
+    res.status(404).json({ error: 'Rota não encontrada' });
+  });
+}
 
 // Iniciar servidor
 app.listen(PORT, () => {
