@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // API principal
 export const api = {
@@ -330,6 +330,10 @@ export const ordersAPI = {
 export const enrollmentsAPI = {
   getAll: async () => {
     return apiRequest('/enrollments');
+  },
+
+  checkEnrollment: async (courseId: string) => {
+    return apiRequest(`/enrollments/check/${courseId}`);
   },
 
   getProgress: async (courseId: string) => {

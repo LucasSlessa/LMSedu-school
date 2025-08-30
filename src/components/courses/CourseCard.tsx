@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Star, Clock, Users, ShoppingCart, CreditCard, BookOpen } from 'lucide-react';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
-import { stripeAPI } from '../../lib/api';
+import { stripeAPI, enrollmentsAPI } from '../../lib/api';
 
 interface Course {
   id: string;
@@ -45,15 +45,8 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, showActions = tr
     const checkEnrollment = async () => {
       if (isAuthenticated && user?.role === 'student') {
         try {
-          const response = await fetch(`http://localhost:3001/api/enrollments/check/${course.id}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            }
-          });
-          if (response.ok) {
-            const data = await response.json();
-            setHasEnrollment(data.hasEnrollment);
-          }
+          const data = await enrollmentsAPI.checkEnrollment(course.id);
+          setHasEnrollment(data.hasEnrollment);
         } catch (error) {
           console.error('Erro ao verificar matrícula:', error);
         }
