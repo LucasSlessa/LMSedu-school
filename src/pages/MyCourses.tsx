@@ -37,12 +37,6 @@ export const MyCourses: React.FC = () => {
     return enrollments.find(e => e.course.id === courseId)?.progressPercentage ?? 0;
   };
   
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
-  };
   
   const handleDownloadCertificate = async (course: any) => {
     const completionPercentage = getCourseProgress(course.id);
@@ -123,28 +117,28 @@ export const MyCourses: React.FC = () => {
           
           return (
             <div key={course.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              <div className="p-6">
-                <div className="flex items-start space-x-6">
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
                   {/* Imagem do Curso */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 mx-auto sm:mx-0">
                     <img
                       src={course.image}
                       alt={course.title}
-                      className="w-32 h-20 object-cover rounded-lg"
+                      className="w-full sm:w-32 h-32 sm:h-20 object-cover rounded-lg"
                     />
                   </div>
                   
                   {/* Informações do Curso */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
+                      <div className="text-center sm:text-left">
+                        <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">
                           {course.title}
                         </h3>
                         <p className="text-gray-600 mb-2">
                           Por {course.instructor}
                         </p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                        <div className="flex items-center justify-center sm:justify-start space-x-4 text-sm text-gray-500">
                           <span className="flex items-center space-x-1">
                             <Clock className="h-4 w-4" />
                             <span>{course.duration}h</span>
@@ -156,7 +150,7 @@ export const MyCourses: React.FC = () => {
                         </div>
                       </div>
                       
-                      <div className="flex items-center space-x-3">
+                      <div className="flex justify-center sm:justify-end">
                         {isCompleted ? (
                           <div className="flex items-center space-x-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-medium">
                             <CheckCircle className="h-4 w-4" />
@@ -190,10 +184,10 @@ export const MyCourses: React.FC = () => {
                     </div>
                     
                     {/* Ações */}
-                    <div className="flex items-center space-x-4">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
                       <Link
                         to={`/learn/${course.id}`}
-                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        className="flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
                       >
                         <Play className="h-4 w-4" />
                         <span>{completionPercentage > 0 ? 'Continuar' : 'Começar'}</span>
@@ -204,7 +198,7 @@ export const MyCourses: React.FC = () => {
                         <button
                           onClick={() => handleDownloadCertificate(course)}
                           disabled={generatingCertificate === course.id}
-                          className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50"
+                          className="flex items-center justify-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50"
                         >
                           {generatingCertificate === course.id ? (
                             <>
@@ -214,20 +208,22 @@ export const MyCourses: React.FC = () => {
                           ) : (
                             <>
                               <Download className="h-4 w-4" />
-                              <span>Baixar Certificado</span>
+                              <span className="hidden sm:inline">Baixar Certificado</span>
+                              <span className="sm:hidden">Certificado</span>
                             </>
                           )}
                         </button>
                       ) : (
-                        <div className="flex items-center space-x-2 bg-gray-100 text-gray-500 px-4 py-2 rounded-lg font-medium">
+                        <div className="flex items-center justify-center space-x-2 bg-gray-100 text-gray-500 px-4 py-2 rounded-lg font-medium">
                           <Lock className="h-4 w-4" />
-                          <span>Certificado Bloqueado</span>
+                          <span className="hidden sm:inline">Certificado Bloqueado</span>
+                          <span className="sm:hidden">Bloqueado</span>
                         </div>
                       )}
                       
                       <Link
                         to={`/courses/${course.id}`}
-                        className="text-gray-600 hover:text-blue-600 transition-colors text-sm font-medium"
+                        className="text-center sm:text-left text-gray-600 hover:text-blue-600 transition-colors text-sm font-medium py-2 sm:py-0"
                       >
                         Ver detalhes
                       </Link>

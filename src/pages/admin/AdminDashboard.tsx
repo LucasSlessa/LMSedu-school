@@ -228,7 +228,7 @@ export const AdminDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-4 sm:p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">Cursos Recentes</h3>
                 <Link
@@ -239,22 +239,22 @@ export const AdminDashboard: React.FC = () => {
                 </Link>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <div className="space-y-4">
                 {recentCourses.map((course) => (
-                  <div key={course.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div key={course.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-0">
                     <div className="flex items-center space-x-4">
                       <img
                         src={course.image}
                         alt={course.title}
-                        className="w-12 h-12 rounded-lg object-cover"
+                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
                       />
-                      <div>
-                        <h4 className="font-medium text-gray-900">{course.title}</h4>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-medium text-gray-900 truncate">{course.title}</h4>
                         <p className="text-sm text-gray-600">{course.studentsCount} alunos</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center justify-between sm:flex-col sm:items-end sm:text-right">
                       <p className="font-semibold text-gray-900">{formatPrice(course.price)}</p>
                       <div className="flex items-center space-x-2 mt-1">
                         <Link
