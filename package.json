@@ -9,7 +9,9 @@
     "server:dev": "nodemon server/app.cjs",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server/app.cjs",
+    "build:production": "npm run build && npm run start"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.4.0",

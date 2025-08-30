@@ -15,6 +15,19 @@ const usersRoutes = require('./routes/users.cjs');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  app.use(express.static(path.join(__dirname, '../dist')));
+  
+  // Handle React Router
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(__dirname, '../dist/index.html'));
+    }
+  });
+}
+
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
