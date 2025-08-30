@@ -10,6 +10,15 @@ const ordersRoutes = require('./routes/orders.cjs');
 const enrollmentsRoutes = require('./routes/enrollments.cjs');
 const stripeRoutes = require('./routes/stripe.cjs');
 const reportsRoutes = require('./routes/reports.cjs');
+// Safe require for users routes
+let usersRoutes;
+try {
+  usersRoutes = require('./routes/users.cjs');
+  console.log('✅ Users routes loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load users routes:', error.message);
+  usersRoutes = null;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,7 +61,9 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/enrollments', enrollmentsRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/reports', reportsRoutes);
-app.use('/api/users', usersRoutes);
+if (usersRoutes) {
+  app.use('/api/users', usersRoutes);
+}
 
 // Rota de health check
 app.get('/api/health', (req, res) => {
