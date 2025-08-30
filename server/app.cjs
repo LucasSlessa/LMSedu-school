@@ -21,7 +21,7 @@ try {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
@@ -100,13 +100,31 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Health check endpoint for Railway
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'LMS EduPlatform API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-  console.log(`🔗 API URL: http://localhost:${PORT}/api`);
+  console.log(`🔗 API URL: http://0.0.0.0:${PORT}/api`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`💾 Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+  });
 });
 
 module.exports = app;
