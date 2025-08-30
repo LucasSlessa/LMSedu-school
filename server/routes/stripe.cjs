@@ -70,7 +70,30 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
 
       if (customerResult.rows.length > 0) {
         console.log('🔍 Cliente Stripe existente encontrado');
-        stripeCustomer = await stripe.customers.retrieve(customerResult.rows[0].customer_id);
+        try {
+          stripeCustomer = await stripe.customers.retrieve(customerResult.rows[0].customer_id);
+        } catch (retrieveError) {
+          console.log('⚠️ Cliente Stripe não existe mais, criando novo:', retrieveError.message);
+          // Remove o registro inválido do banco
+          await executeQuery(
+            'DELETE FROM stripe_customers WHERE user_id = $1',
+            [req.user.id]
+          );
+          // Criar novo cliente
+          stripeCustomer = await stripe.customers.create({
+            email: req.user.email,
+            name: req.user.name,
+            metadata: {
+              userId: req.user.id
+            }
+          });
+          // Salvar no banco
+          await executeQuery(
+            'INSERT INTO stripe_customers (user_id, customer_id) VALUES ($1, $2)',
+            [req.user.id, stripeCustomer.id]
+          );
+          console.log('✅ Novo cliente Stripe criado:', stripeCustomer.id);
+        }
       } else {
         console.log('🆕 Criando novo cliente Stripe');
         // Criar novo cliente no Stripe
