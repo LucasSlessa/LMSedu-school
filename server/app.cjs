@@ -52,7 +52,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rotas
+// Health check endpoints (ANTES das outras rotas)
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'LMS EduPlatform API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Rotas da API
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', coursesRoutes);
 app.use('/api/categories', categoriesRoutes);
@@ -64,15 +82,6 @@ app.use('/api/reports', reportsRoutes);
 if (usersRoutes) {
   app.use('/api/users', usersRoutes);
 }
-
-// Rota de health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
 
 // Middleware de erro global
 app.use((err, req, res, next) => {
@@ -100,15 +109,6 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Health check endpoint for Railway
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'LMS EduPlatform API is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
 
 // Iniciar servidor
 const server = app.listen(PORT, '0.0.0.0', () => {
