@@ -91,7 +91,17 @@ router.post('/create-checkout-session', authenticateToken, async (req, res) => {
       }
     } catch (error) {
       console.error('❌ Erro ao gerenciar cliente Stripe:', error);
-      return res.status(500).json({ error: 'Erro ao configurar cliente de pagamento' });
+      console.error('Erro completo:', {
+        message: error.message,
+        type: error.type,
+        code: error.code,
+        statusCode: error.statusCode,
+        stack: error.stack
+      });
+      return res.status(500).json({ 
+        error: 'Erro ao configurar cliente de pagamento',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
 
     // Criar sessão de checkout
