@@ -7,11 +7,21 @@ const router = express.Router();
 
 // Inicializar Stripe (ou mock se não houver chave)
 let stripe;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  console.log('✅ Stripe configurado com chave:', process.env.STRIPE_SECRET_KEY.substring(0, 20) + '...');
+console.log('🔍 Verificando configuração do Stripe...');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('STRIPE_SECRET_KEY existe:', !!process.env.STRIPE_SECRET_KEY);
+console.log('STRIPE_SECRET_KEY valor:', process.env.STRIPE_SECRET_KEY ? process.env.STRIPE_SECRET_KEY.substring(0, 20) + '...' : 'UNDEFINED');
+
+if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'sk_test_sua_chave_secreta_stripe') {
+  try {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    console.log('✅ Stripe configurado com chave:', process.env.STRIPE_SECRET_KEY.substring(0, 20) + '...');
+  } catch (error) {
+    console.error('❌ Erro ao inicializar Stripe:', error.message);
+    stripe = null;
+  }
 } else {
-  console.log('⚠️  Stripe não configurado, usando modo mock');
+  console.log('⚠️  Stripe não configurado ou usando chave placeholder, usando modo mock');
   stripe = null;
 }
 
