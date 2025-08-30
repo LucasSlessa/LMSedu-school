@@ -43,9 +43,12 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   }, [maxSize]);
   
   const simulateUpload = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       setIsUploading(true);
       setUploadProgress(0);
+      
+      // Criar URL temporária imediatamente para preview
+      const imageUrl = URL.createObjectURL(file);
       
       // Simular progresso de upload
       const interval = setInterval(() => {
@@ -56,15 +59,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             setIsUploading(false);
             setUploadProgress(100);
             
-            // Criar URL temporária para preview (em produção seria a URL real do servidor)
-            const imageUrl = URL.createObjectURL(file);
+            // Resolver com a URL da imagem
             resolve(imageUrl);
             
             return 100;
           }
           return newProgress;
         });
-      }, 200);
+      }, 100); // Mais rápido para melhor UX
     });
   }, []);
   
@@ -135,7 +137,27 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   
   const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
-    onImageSelect(e.target.value);
+    const url = e.target.value.trim();
+    
+    // Reset error state
+    setError(null);
+    setUploadProgress(0);
+    
+    // If URL is empty, clear the image
+    if (!url) {
+      onImageSelect('');
+      return;
+    }
+    
+    // Basic URL validation
+    try {
+      new URL(url);
+      onImageSelect(url);
+      setUploadProgress(100); // Mark as "uploaded" for URL images
+    } catch (error) {
+      // If URL is invalid, still pass it through but don't mark as complete
+      onImageSelect(url);
+    }
   }, [onImageSelect]);
   
   return (
@@ -173,7 +195,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                 src={currentImage}
                 alt="Preview"
                 className="w-full h-48 object-cover rounded-lg"
-                onError={() => setError('Erro ao carregar imagem')}
+                onError={() => {
+                  console.error('Erro ao carregar imagem:', currentImage);
+                  setError(`Erro ao carregar imagem: ${currentImage}`);
+                }}
+                onLoad={() => {
+                  console.log('Imagem carregada com sucesso:', currentImage);
+                  setError(null);
+                }}
               />
               <div className="absolute inset-0 bg-black bg-opacity-40 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                 <div className="flex items-center space-x-3">

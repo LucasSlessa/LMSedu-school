@@ -157,10 +157,12 @@ export const coursesAPI = {
   },
 
   create: async (courseData: unknown) => {
-    return apiRequest('/courses', {
+    const response = await apiRequest('/courses', {
       method: 'POST',
       body: JSON.stringify(courseData),
     });
+    // Backend returns { message, course }, we need just the course
+    return response.course || response;
   },
 
   update: async (id: string, courseData: unknown) => {

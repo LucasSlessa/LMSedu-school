@@ -138,11 +138,31 @@ export const AdminCourseForm: React.FC = () => {
                       files: []
                     };
 
-                    // Se for quiz, carregar as perguntas
-                    if (lesson.contentType === 'quiz' && lesson.quizQuestions) {
-                      baseLesson.quizQuestions = lesson.quizQuestions;
-                    } else if (lesson.contentType === 'quiz') {
-                      baseLesson.quizQuestions = [];
+                    // Se for quiz, carregar as perguntas do banco
+                    if (lesson.contentType === 'quiz') {
+                      console.log('🎯 Frontend processando aula de quiz:', {
+                        lessonId: lesson.id,
+                        lessonTitle: lesson.title,
+                        hasQuizQuestions: !!lesson.quiz_questions,
+                        quizQuestionsType: typeof lesson.quiz_questions,
+                        quizQuestionsValue: lesson.quiz_questions,
+                        fullLesson: lesson
+                      });
+                      
+                      if (lesson.quiz_questions) {
+                        try {
+                          baseLesson.quizQuestions = typeof lesson.quiz_questions === 'string' 
+                            ? JSON.parse(lesson.quiz_questions) 
+                            : lesson.quiz_questions;
+                          console.log('✅ Quiz questions parsed:', baseLesson.quizQuestions);
+                        } catch (error) {
+                          console.error('❌ Erro ao parsear dados do quiz:', error);
+                          baseLesson.quizQuestions = [];
+                        }
+                      } else {
+                        console.log('⚠️ lesson.quiz_questions é null/undefined');
+                        baseLesson.quizQuestions = [];
+                      }
                     }
 
                     return baseLesson;
@@ -275,7 +295,11 @@ export const AdminCourseForm: React.FC = () => {
         level: formData.level,
         requirements: '',
         whatYouLearn: '',
-        targetAudience: ''
+        targetAudience: '',
+        // For UPDATE route - map fields correctly
+        duration: formData.duration, // backend update expects 'duration'
+        category: formData.category, // backend update expects 'category' name
+        image: formData.image        // backend update expects 'image'
       };
       
       console.log('📊 Dados do curso para salvar:', courseData);

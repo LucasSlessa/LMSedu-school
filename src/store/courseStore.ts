@@ -47,7 +47,7 @@ interface CourseState {
   // Course methods
   fetchCourses: (params?: CourseQueryParams) => Promise<void>;
   getCourseById: (id: string) => Course | undefined;
-  addCourse: (courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>) => Promise<void>;
+  addCourse: (courseData: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'rating' | 'studentsCount'>) => Promise<Course>;
   updateCourse: (id: string, courseData: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   
@@ -96,6 +96,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
       set(state => ({
         courses: [...state.courses, newCourse]
       }));
+      return newCourse; // CRITICAL: Return the created course
     } catch (error) {
       console.error('Erro ao criar curso:', error);
       throw error;

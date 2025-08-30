@@ -14,10 +14,19 @@ router.get('/', async (req, res) => {
         c.*,
         cat.name as category_name,
         cat.color as category_color,
-        u.name as instructor_name
+        u.name as instructor_name,
+        COALESCE(enrollment_count.active_students, 0) as actual_students_count
       FROM courses c
       LEFT JOIN categories cat ON c.category_id = cat.id
       LEFT JOIN users u ON c.instructor_id = u.id
+      LEFT JOIN (
+        SELECT 
+          course_id, 
+          COUNT(*) as active_students 
+        FROM enrollments 
+        WHERE status = 'active' 
+        GROUP BY course_id
+      ) enrollment_count ON c.id = enrollment_count.course_id
     `;
     
     // Se não for admin, filtrar apenas cursos publicados
@@ -73,7 +82,7 @@ router.get('/', async (req, res) => {
       image: row.image_url,
       level: row.level,
       rating: parseFloat(row.rating),
-      studentsCount: row.students_count,
+      studentsCount: row.actual_students_count || row.students_count || 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
@@ -96,10 +105,19 @@ router.get('/:id', async (req, res) => {
         cat.name as category_name,
         cat.color as category_color,
         u.name as instructor_name,
-        u.email as instructor_email
+        u.email as instructor_email,
+        COALESCE(enrollment_count.active_students, 0) as actual_students_count
       FROM courses c
       LEFT JOIN categories cat ON c.category_id = cat.id
       LEFT JOIN users u ON c.instructor_id = u.id
+      LEFT JOIN (
+        SELECT 
+          course_id, 
+          COUNT(*) as active_students 
+        FROM enrollments 
+        WHERE status = 'active' 
+        GROUP BY course_id
+      ) enrollment_count ON c.id = enrollment_count.course_id
       WHERE c.id = $1 AND c.status = 'published'
     `, [id]);
 
@@ -123,7 +141,7 @@ router.get('/:id', async (req, res) => {
       image: row.image_url,
       level: row.level,
       rating: parseFloat(row.rating),
-      studentsCount: row.students_count,
+      studentsCount: row.actual_students_count || row.students_count || 0,
       requirements: row.requirements,
       whatYouLearn: row.what_you_learn,
       targetAudience: row.target_audience,

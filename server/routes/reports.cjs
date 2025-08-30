@@ -15,14 +15,14 @@ router.get('/overview', async (req, res) => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(days));
 
-    // Total de receita baseado em user_courses (compras de cursos)
+    // Total de receita baseado em orders (compras de cursos)
     let totalRevenue = 0;
     try {
       const revenueResult = await executeQuery(`
-        SELECT COALESCE(SUM(c.price), 0) as total_revenue
-        FROM user_courses uc
-        JOIN courses c ON uc.course_id = c.id
-        WHERE uc.created_at >= $1
+        SELECT COALESCE(SUM(oi.price * oi.quantity), 0) as total_revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        WHERE o.status = 'completed' AND o.created_at >= $1
       `, [daysAgo]);
       totalRevenue = parseFloat(revenueResult.rows[0]?.total_revenue || 0);
     } catch (error) {
@@ -43,13 +43,13 @@ router.get('/overview', async (req, res) => {
       FROM courses
     `);
 
-    // Cursos completados (baseado em user_courses) - usando try/catch
+    // Cursos completados (baseado em enrollments) - usando try/catch
     let completedCourses = 0;
     try {
       const completedCoursesResult = await executeQuery(`
         SELECT COUNT(*) as completed_courses
-        FROM user_courses uc
-        WHERE uc.completed_at IS NOT NULL
+        FROM enrollments e
+        WHERE e.status = 'completed'
       `);
       completedCourses = parseInt(completedCoursesResult.rows[0]?.completed_courses || 0);
     } catch (error) {
@@ -57,17 +57,17 @@ router.get('/overview', async (req, res) => {
       completedCourses = 0;
     }
 
-    // Receita por mês (últimos 6 meses) baseado em user_courses - usando try/catch
+    // Receita por mês (últimos 6 meses) baseado em orders - usando try/catch
     let monthlyRevenue = [];
     try {
       const monthlyRevenueResult = await executeQuery(`
         SELECT 
-          DATE_TRUNC('month', uc.created_at) as month,
-          COALESCE(SUM(c.price), 0) as revenue
-        FROM user_courses uc
-        JOIN courses c ON uc.course_id = c.id
-        WHERE uc.created_at >= NOW() - INTERVAL '6 months'
-        GROUP BY DATE_TRUNC('month', uc.created_at)
+          DATE_TRUNC('month', o.created_at) as month,
+          COALESCE(SUM(oi.price * oi.quantity), 0) as revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        WHERE o.status = 'completed' AND o.created_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', o.created_at)
         ORDER BY month DESC
       `);
       monthlyRevenue = monthlyRevenueResult.rows;
@@ -94,18 +94,19 @@ router.get('/overview', async (req, res) => {
       coursesByCategory = [];
     }
 
-    // Top 5 cursos por receita baseado em user_courses - usando try/catch
+    // Top 5 cursos por receita baseado em order_items - usando try/catch
     let topCourses = [];
     try {
       const topCoursesResult = await executeQuery(`
         SELECT 
           c.title,
           c.id,
-          COUNT(uc.id) as sales,
-          COALESCE(SUM(c.price), 0) as revenue,
-          COALESCE(AVG(c.price), 0) as avg_ticket
+          COUNT(oi.id) as sales,
+          COALESCE(SUM(oi.price * oi.quantity), 0) as revenue,
+          COALESCE(AVG(oi.price), 0) as avg_ticket
         FROM courses c
-        LEFT JOIN user_courses uc ON c.id = uc.course_id
+        LEFT JOIN order_items oi ON c.id = oi.course_id
+        LEFT JOIN orders o ON oi.order_id = o.id AND o.status = 'completed'
         GROUP BY c.id, c.title
         ORDER BY revenue DESC
         LIMIT 5
@@ -135,14 +136,14 @@ router.get('/overview', async (req, res) => {
       newStudents = [];
     }
 
-    // Taxa de conclusão baseado em user_courses - usando try/catch
+    // Taxa de conclusão baseado em enrollments - usando try/catch
     let completionRate = 0;
     try {
       const completionRateResult = await executeQuery(`
         SELECT 
-          COUNT(CASE WHEN uc.completed_at IS NOT NULL THEN 1 END) as completed,
+          COUNT(CASE WHEN e.status = 'completed' THEN 1 END) as completed,
           COUNT(*) as total
-        FROM user_courses uc
+        FROM enrollments e
       `);
       
       completionRate = completionRateResult.rows[0].total > 0 
